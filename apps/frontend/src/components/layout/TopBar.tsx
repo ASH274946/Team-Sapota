@@ -6,6 +6,7 @@ import { Bell, ChevronDown, Menu, LogOut, Settings, ArrowLeft, Building2 } from 
 import { useSidebarStore } from '@/store/sidebar.store';
 import { useAuthStore } from '@/store/auth.store';
 import { useAdminAuthStore } from '@/store/admin-auth.store';
+import { useNotificationStore } from '@/store/notification.store';
 import Notification2 from '@/components/ui/Notification2';
 import Link from 'next/link';
 
@@ -13,13 +14,21 @@ export function Topbar() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuthStore();
+  const { items: notificationItems, fetchNotifications } = useNotificationStore();
+  const unreadNotificationCount = notificationItems.filter((i) => i.isUnread).length;
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isOrgSwitcherOpen, setIsOrgSwitcherOpen] = useState(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [isSwitching, setIsSwitching] = useState(false);
   const toggle = useSidebarStore((s) => s.toggle);
-  const showBackButton = pathname !== '/' && pathname !== '/dashboard' && pathname !== '/student' && pathname !== '/teacher' && pathname !== '/faculty' && pathname !== '/admin' && pathname !== '/super-admin';
+  // Grader workspaces provide their own single, contextual back action. Keeping
+  // the shell back arrow there creates stacked navigation controls.
+  const showBackButton = !pathname.startsWith('/grader') && pathname !== '/' && pathname !== '/dashboard' && pathname !== '/student' && pathname !== '/teacher' && pathname !== '/faculty' && pathname !== '/admin' && pathname !== '/super-admin';
   const { availableOrganizations, activeOrganizationId, fetchAvailableOrganizations } = useAdminAuthStore();
+
+  useEffect(() => {
+    fetchNotifications();
+  }, [fetchNotifications]);
 
   useEffect(() => {
     if (user?.role === 'SUPER_ADMIN') {
@@ -193,7 +202,11 @@ export function Topbar() {
               aria-label="Notifications"
             >
               <Bell className="w-4 h-4" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-amber-500 ring-2 ring-white" />
+              {unreadNotificationCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[17px] h-[17px] px-1 rounded-full bg-orange-500 text-white text-[10px] font-black flex items-center justify-center ring-2 ring-white tabular-nums leading-none">
+                  {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
+                </span>
+              )}
             </button>
 
             {isNotificationOpen && (
@@ -201,7 +214,7 @@ export function Topbar() {
                 onClick={(e) => e.stopPropagation()}
                 className="absolute right-0 mt-2 w-80 sm:w-96 z-50"
               >
-                <Notification2 />
+                <Notification2 onClose={() => setIsNotificationOpen(false)} />
               </div>
             )}
           </div>

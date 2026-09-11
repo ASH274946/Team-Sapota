@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import path from 'path';
 import { generateSingleQuestion, generateMultipleQuestions, GeneratedQuestion } from '../services/question-generation.service';
 import prisma from '../config/prisma';
 import { logger } from '../utils/logger';

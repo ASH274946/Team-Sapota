@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import path from 'path';
 import prisma from '../config/prisma';
 import { evaluateSubmission, extractTextFromFile, overrideEvaluation } from '../services/grader.service';
 import { AuditService } from '../services/audit.service';
@@ -8,12 +9,13 @@ import {
   handleAccessError,
 } from '../security/assignment-access';
 import { requireRequestOrgId, getRequestUserId } from '../security/request-context';
+import { getPaper } from '../services/paper.service';
 
 export const saveGradingConfig = async (req: Request, res: Response): Promise<void> => {
   try {
     const { assignmentId } = req.params;
     await assertCanGradeAssignment(req, assignmentId);
-    const { rubricId, answerKeyText } = req.body;
+    const { rubricId, answerKeyText, autoEvaluate } = req.body;
 
     const config = await prisma.assignmentGradingConfig.upsert({
       where: { assignmentId },
@@ -21,10 +23,12 @@ export const saveGradingConfig = async (req: Request, res: Response): Promise<vo
         assignmentId,
         rubricId: rubricId || null,
         answerKeyText: answerKeyText || '',
+        autoEvaluate: autoEvaluate !== false,
       },
       update: {
         rubricId: rubricId || null,
         answerKeyText: answerKeyText || '',
+        autoEvaluate: autoEvaluate !== false,
       },
     });
 
@@ -32,6 +36,30 @@ export const saveGradingConfig = async (req: Request, res: Response): Promise<vo
   } catch (err) {
     if (handleAccessError(res, err)) return;
     res.status(500).json({ success: false, error: 'Failed to save grading config' });
+  }
+};
+
+/** Upload and extract the source question paper once so every answer sheet uses it. */
+export const uploadQuestionPaper = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { assignmentId } = req.params;
+    await assertCanGradeAssignment(req, assignmentId);
+    const file = req.file;
+    if (!file) {
+      res.status(400).json({ success: false, error: 'A question paper file is required' });
+      return;
+    }
+
+    const questionPaperText = await extractTextFromFile(file.path, file.mimetype);
+    const config = await prisma.assignmentGradingConfig.upsert({
+      where: { assignmentId },
+      create: { assignmentId, questionPaperPath: file.path, questionPaperName: file.originalname, questionPaperType: file.mimetype, questionPaperText },
+      update: { questionPaperPath: file.path, questionPaperName: file.originalname, questionPaperType: file.mimetype, questionPaperText },
+    });
+    res.status(201).json({ success: true, data: config });
+  } catch (err) {
+    if (handleAccessError(res, err)) return;
+    res.status(500).json({ success: false, error: 'Failed to upload question paper' });
   }
 };
 
@@ -175,7 +203,7 @@ export const listSubmissions = async (req: Request, res: Response): Promise<void
     requireRequestOrgId(req);
 
     const submissions = await prisma.studentSubmission.findMany({
-      where: { assignmentId },
+      where: { assignmentId, status: { in: ['SUBMITTED', 'UNDER_REVIEW', 'GRADED', 'RESULT_PUBLISHED'] } },
       include: { evaluations: true },
       orderBy: { submittedAt: 'desc' },
     });
@@ -208,29 +236,40 @@ export const uploadSubmission = async (req: Request, res: Response): Promise<voi
     const { assignmentId } = req.params;
     await assertCanGradeAssignment(req, assignmentId);
     const orgId = requireRequestOrgId(req);
-    const file = req.file;
+    const files = req.files as Express.Multer.File[] | undefined;
 
-    if (!file) {
-      res.status(400).json({ success: false, error: 'No file uploaded' });
+    if (!files?.length) {
+      res.status(400).json({ success: false, error: 'At least one answer sheet is required' });
       return;
     }
+    const [config, generatedPaper] = await Promise.all([
+      prisma.assignmentGradingConfig.findUnique({ where: { assignmentId } }),
+      getPaper(assignmentId).catch(() => null),
+    ]);
+    const canEvaluate = Boolean(config && (config.answerKeyText.trim() || config.questionPaperText?.trim() || generatedPaper));
+    const uploaded = [];
+    for (const file of files) {
+      // A stable filename-derived identity lets a corrected scan replace a previous upload.
+      const stem = path.basename(file.originalname, path.extname(file.originalname)).trim().toLowerCase();
+      const studentId = `uploaded:${stem || file.filename}`;
+      const submission = await prisma.studentSubmission.upsert({
+        where: { assignmentId_studentId: { assignmentId, studentId } },
+        create: { assignmentId, studentId, organizationId: orgId, fileUrl: file.path, fileType: file.mimetype, status: 'SUBMITTED' },
+        update: { fileUrl: file.path, fileType: file.mimetype, status: 'SUBMITTED', submittedAt: new Date() },
+      });
+      if (config?.autoEvaluate && canEvaluate) {
+        try {
+          const evaluation = await evaluateSubmission(submission.id);
+          uploaded.push({ submission, evaluation, evaluated: true });
+        } catch (error) {
+          uploaded.push({ submission, evaluated: false, error: error instanceof Error ? error.message : 'Evaluation failed' });
+        }
+      } else {
+        uploaded.push({ submission, evaluated: false, pendingReason: canEvaluate ? 'Automatic evaluation is disabled' : 'Upload a question paper or enter an answer key before evaluating' });
+      }
+    }
 
-    const studentId = 'test-student-' + Date.now().toString(); 
-
-    const fileUrl = file.path;
-
-    const submission = await prisma.studentSubmission.create({
-      data: {
-        assignmentId,
-        studentId,
-        organizationId: orgId,
-        fileUrl,
-        fileType: file.mimetype,
-        status: 'SUBMITTED',
-      },
-    });
-
-    res.status(201).json({ success: true, data: submission });
+    res.status(201).json({ success: true, data: uploaded });
   } catch (err) {
     if (handleAccessError(res, err)) return;
     res.status(500).json({ success: false, error: 'Failed to upload submission' });

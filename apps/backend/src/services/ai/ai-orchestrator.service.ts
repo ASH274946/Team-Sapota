@@ -4,6 +4,7 @@ import { PromptBuilderService } from './prompt-builder.service';
 import { OpenAIProvider } from './providers/openai.provider';
 import { GroqProvider } from './providers/groq.provider';
 import { NvidiaProvider } from './providers/nvidia.provider';
+import { GeminiProvider } from './providers/gemini.provider';
 import { AIProvider } from './providers/provider.interface';
 import { ProviderHealthManager } from './provider-health';
 import { withTimeout, createTimeoutSignal } from '../../utils/timeout';
@@ -25,13 +26,14 @@ export interface AIRequestOptions {
 
 const DEFAULT_SECONDARY_TIMEOUT_MS = 30_000;
 // Preferred fallback order when the registry-selected provider fails or circuit is open.
-const FALLBACK_ORDER: string[] = ['groq', 'openai', 'nvidia'];
+const FALLBACK_ORDER: string[] = ['groq', 'openai', 'nvidia', 'gemini'];
 
 export class AIOrchestrator {
   private static providers: Record<string, AIProvider> = {
     openai: new OpenAIProvider(),
     groq: new GroqProvider(),
     nvidia: new NvidiaProvider(),
+    gemini: new GeminiProvider(),
   };
 
   // Circuit breaker manager tracking health and state transitions across providers

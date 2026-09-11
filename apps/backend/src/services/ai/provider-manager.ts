@@ -189,7 +189,7 @@ export class OpenAIProvider extends BaseAIProvider {
  */
 export class GeminiProvider extends BaseAIProvider {
   providerName = 'Gemini';
-  modelName = 'gemini-1.5-flash';
+  modelName = 'gemini-2.5-flash';
 
   getCost(tokensPrompt: number, tokensCompletion: number): number {
     return (tokensPrompt * 0.075 + tokensCompletion * 0.3) / 1_000_000;

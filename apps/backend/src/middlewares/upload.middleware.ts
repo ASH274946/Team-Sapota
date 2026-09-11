@@ -22,8 +22,8 @@ const storage = multer.diskStorage({
 const ALLOWED_EXTENSIONS = ['.pdf', '.txt', '.md', '.docx', '.doc', '.png', '.jpg', '.jpeg', '.webp'];
 
 const ALLOWED_TYPES: Record<string, string[]> = {
-  '.pdf': ['application/pdf', 'application/x-pdf', 'application/octet-stream'],
-  '.txt': ['text/plain', 'text/x-plain', 'application/octet-stream'],
+  '.pdf': ['application/pdf', 'application/x-pdf', 'application/octet-stream', 'binary/octet-stream'],
+  '.txt': ['text/plain', 'text/x-plain', 'text/markdown', 'text/csv', 'application/octet-stream'],
   '.md': ['text/markdown', 'text/x-markdown', 'text/plain', 'application/octet-stream'],
   '.docx': [
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
