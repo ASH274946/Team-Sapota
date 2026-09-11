@@ -1,0 +1,20 @@
+# VedaAI Monorepo
+node_modules/
+dist/
+build/
+.next/
+.turbo/
+out/
+.eslintcache
+*.tsbuildinfo
+*.log
+.env
+.env.local
+.env.production
+uploads/
+*.pdf
+coverage/
+.nyc_output/
+dump.rdb
+redis-local/
+plans/
