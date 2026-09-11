@@ -1554,7 +1554,7 @@ interface UploadedFileItem {
             className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 text-xs font-extrabold text-white shadow-sm hover:bg-orange-600 active:scale-[0.98] transition-all cursor-pointer"
           >
             <FolderPlus className="size-4" />
-            <span>+ Create Course</span>
+            <span>Create Course</span>
           </button>
 
           {courses.length > 0 && (
@@ -1632,7 +1632,7 @@ interface UploadedFileItem {
             onClick={() => setShowCreateCourseModal(true)}
             className="px-4 py-2 rounded-xl bg-orange-500 text-white text-xs font-bold shadow-sm hover:bg-orange-600 transition-all cursor-pointer"
           >
-            + Create New Course
+            Create New Course
           </button>
         </div>
       )}
