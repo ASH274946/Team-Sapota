@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildLessonPlanHtml, generateLessonPlanPdf } from '../services/pdf.service';
+import { getPdfStorage } from '../services/storage';
 import type { ILessonPlanData } from '../types/lesson-plan.types';
 import * as fs from 'fs';
 
@@ -106,7 +107,12 @@ describe('PDF Generation Performance & Visual Verification', () => {
     expect(result.pdfUrl).toBeTruthy();
     const maxAllowedTimeMs = process.env.CI ? 60_000 : 15_000;
     expect(totalTime).toBeLessThan(maxAllowedTimeMs); // hard cutoff with CI tolerance
-    expect(fs.existsSync(result.pdfPath)).toBe(true);
-    expect(fs.statSync(result.pdfPath).size).toBeGreaterThan(1000); // Non-empty valid PDF
+
+    const storage = getPdfStorage();
+    const exists = (await storage.exists(result.pdfPath)) || (result.pdfBuffer && result.pdfBuffer.length > 1000) || fs.existsSync(result.pdfPath);
+    expect(exists).toBeTruthy();
+
+    const pdfSize = result.pdfBuffer ? result.pdfBuffer.length : (fs.existsSync(result.pdfPath) ? fs.statSync(result.pdfPath).size : 0);
+    expect(pdfSize).toBeGreaterThan(1000); // Non-empty valid PDF
   }, 60000);
 });

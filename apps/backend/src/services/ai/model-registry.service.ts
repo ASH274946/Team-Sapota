@@ -49,7 +49,7 @@ export const ModelRegistry: Record<string, ModelConfig> = {
 
 export class ModelRegistryService {
   static getModelForIntent(intent: string): ModelConfig {
-    if (['GenerateQuestionPaper', 'EvaluateAssignment', 'OCRPostProcessing'].includes(intent)) {
+    if (['EvaluateAssignment', 'OCRPostProcessing'].includes(intent)) {
       return ModelRegistry['gemini-2.5-flash'];
     }
     // Lesson plans and test papers go to Groq 120B for top quality, high speed, and native JSON

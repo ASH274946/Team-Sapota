@@ -235,7 +235,7 @@ function buildAnswerKeyHtml(paper: IGeneratedPaper, type: 'paper' | 'key' | 'bot
  */
 export async function generateLessonPlanPdf(
   data: ILessonPlanData,
-): Promise<{ pdfPath: string; pdfUrl: string }> {
+): Promise<{ pdfPath: string; pdfUrl: string; pdfBuffer?: Buffer }> {
   // Dynamic import — avoids loading Puppeteer at startup
   const puppeteer = await import('puppeteer-core');
 
@@ -279,7 +279,7 @@ export async function generateLessonPlanPdf(
     const pdfPath = storageKey;
 
     logger.info(`[PDF:LESSON_PLAN] Generated and saved to R2: ${storageKey}`);
-    return { pdfPath, pdfUrl };
+    return { pdfPath, pdfUrl, pdfBuffer };
   } finally {
     if (browser) await browser.close();
   }
