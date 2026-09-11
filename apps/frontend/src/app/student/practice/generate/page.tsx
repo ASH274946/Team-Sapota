@@ -259,40 +259,6 @@ export default function CustomQuizGenerator() {
             </div>
           </div>
 
-<<<<<<< HEAD
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 24 }}>
-            <label style={{ fontSize: 13, fontWeight: 700, color: '#475569' }}>Reference Context (Optional)</label>
-            <div style={{ position: 'relative' }}>
-              <textarea 
-                rows={5} 
-                placeholder="Paste syllabus or reference material here... Avoid pasting images or file paths." 
-                value={formData.context} 
-                onChange={e => setFormData({...formData, context: e.target.value})} 
-                style={{ width: '100%', padding: '16px', paddingBottom: 50, borderRadius: 16, border: '1px solid #E2E8F0', fontSize: 14, outline: 'none', resize: 'vertical' }}
-              />
-              <label style={{
-                position: 'absolute',
-                bottom: 12,
-                right: 12,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                padding: '8px 12px',
-                background: '#F8FAFC',
-                border: '1px solid #E2E8F0',
-                borderRadius: 8,
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: isUploading ? 'default' : 'pointer',
-                color: '#64748B',
-                opacity: isUploading ? 0.7 : 1,
-                transition: 'all 0.2s ease',
-              }}>
-                {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Paperclip size={14} />}
-                {isUploading ? 'Parsing...' : 'Attach File'}
-                <input type="file" accept=".pdf,.docx,.doc,.txt,.md,.png,.jpg,.jpeg,.webp,.csv" style={{display:'none'}} onChange={handleFileUpload} disabled={isUploading} />
-              </label>
-=======
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <label className="text-[13px] font-bold text-slate-700">Reference Context (Optional)</label>
@@ -301,7 +267,6 @@ export default function CustomQuizGenerator() {
                   <CheckCircle2 size={13} /> 1 Document Attached
                 </span>
               )}
->>>>>>> origin/main
             </div>
 
             {attachedDoc ? (

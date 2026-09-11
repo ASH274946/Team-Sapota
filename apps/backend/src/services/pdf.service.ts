@@ -21,6 +21,7 @@ export async function generatePdf(
 
   const html = buildPaperHtml(paper, type);
 
+  const storage = getPdfStorage();
   const suffix = type === 'both' ? '' : `-${type}`;
   const fileName = `paper-${paper.assignmentId.toString()}-${Date.now()}${suffix}.pdf`;
   const storageKey = `question-papers/${fileName}`;
