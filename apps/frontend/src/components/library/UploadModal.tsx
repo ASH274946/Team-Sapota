@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { X, UploadCloud, FileText, AlertCircle, Loader2 } from 'lucide-react';
 import { LibraryService } from '@/services/library.service';
 import { cn } from '@/lib/utils';
@@ -27,10 +27,38 @@ export function UploadModal({ isOpen, onClose, onSuccess }: UploadModalProps) {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const resetForm = useCallback(() => {
+    setFile(null);
+    setTitle('');
+    setDescription('');
+    setResourceType('PDF');
+    setSubject('General');
+    setClassName('General');
+    setError(null);
+    setLoading(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }, []);
+
+  // Reset form whenever the modal opens or closes
+  useEffect(() => {
+    if (isOpen) {
+      resetForm();
+    }
+  }, [isOpen, resetForm]);
+
+  const handleClose = () => {
+    if (loading) return;
+    resetForm();
+    onClose();
+  };
+
   if (!isOpen) return null;
 
   const updateFileState = (newFile: File) => {
     setFile(newFile);
+    setError(null);
     if (!title) {
       // Auto-fill title from filename without extension
       setTitle(newFile.name.replace(/\.[^/.]+$/, ''));
@@ -40,17 +68,17 @@ export function UploadModal({ isOpen, onClose, onSuccess }: UploadModalProps) {
     const extension = newFile.name.split('.').pop()?.toLowerCase() || '';
     const mimeType = newFile.type.toLowerCase();
 
-    if (mimeType.startsWith('video/') || ['mp4', 'webm', 'mov', 'avi'].includes(extension)) {
+    if (mimeType.startsWith('video/') || ['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(extension)) {
       setResourceType('Video');
     } else if (mimeType.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(extension)) {
       setResourceType('Image');
     } else if (mimeType === 'application/pdf' || extension === 'pdf') {
       setResourceType('PDF');
-    } else if (mimeType.includes('presentation') || ['ppt', 'pptx'].includes(extension)) {
+    } else if (mimeType.includes('presentation') || ['ppt', 'pptx', 'odp'].includes(extension)) {
       setResourceType('Presentation');
     } else if (mimeType.includes('zip') || mimeType.includes('rar') || mimeType.includes('tar') || ['zip', 'rar', 'tar', 'gz', '7z'].includes(extension)) {
       setResourceType('Archive');
-    } else if (['doc', 'docx', 'txt', 'rtf', 'csv', 'xlsx', 'xls'].includes(extension) || mimeType.includes('word') || mimeType.includes('text/') || mimeType.includes('sheet')) {
+    } else if (['doc', 'docx', 'txt', 'rtf', 'csv', 'xlsx', 'xls', 'odt', 'ods', 'json'].includes(extension) || mimeType.includes('word') || mimeType.includes('text/') || mimeType.includes('sheet')) {
       setResourceType('Document');
     } else {
       setResourceType('Other');
@@ -82,28 +110,31 @@ export function UploadModal({ isOpen, onClose, onSuccess }: UploadModalProps) {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('title', title);
-      formData.append('description', description);
+      formData.append('title', title.trim());
+      formData.append('description', description.trim());
       formData.append('resourceType', resourceType);
       formData.append('subject', subject);
       formData.append('className', className);
 
       await LibraryService.uploadResource(formData);
+      resetForm();
       onSuccess();
       onClose();
-      // Reset
-      setFile(null);
-      setTitle('');
-      setDescription('');
     } catch (err: any) {
-      setError(err?.response?.data?.error || 'Failed to upload resource');
+      const serverError = err?.response?.data?.error || err?.message || 'Failed to upload resource';
+      setError(serverError);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) handleClose();
+      }}
+    >
       <div className="bg-white rounded-2xl border border-neutral-200/90 shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col my-8 max-h-[92vh]">
         {/* Header */}
         <div className="px-6 py-4 border-b border-neutral-200/80 flex items-center justify-between bg-white">
@@ -113,7 +144,7 @@ export function UploadModal({ isOpen, onClose, onSuccess }: UploadModalProps) {
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             className="p-2 rounded-xl text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 transition-all"
           >
             <X className="size-5" />
@@ -163,6 +194,7 @@ export function UploadModal({ isOpen, onClose, onSuccess }: UploadModalProps) {
                     onClick={(e) => {
                       e.stopPropagation();
                       setFile(null);
+                      if (fileInputRef.current) fileInputRef.current.value = '';
                     }}
                     className="mt-1 px-3 py-1.5 rounded-xl border border-neutral-300 bg-white hover:bg-neutral-100 text-neutral-700 text-xs font-bold transition-all shadow-2xs"
                   >
@@ -255,9 +287,9 @@ export function UploadModal({ isOpen, onClose, onSuccess }: UploadModalProps) {
         <div className="px-6 py-4 border-t border-neutral-200/90 bg-neutral-50 flex items-center justify-end gap-3 rounded-b-2xl">
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             disabled={loading}
-            className="px-5 py-2.5 rounded-xl border border-neutral-300 bg-white hover:bg-neutral-100 text-neutral-700 text-xs font-bold transition-all shadow-2xs"
+            className="px-5 py-2.5 rounded-xl border border-neutral-300 bg-white hover:bg-neutral-100 text-neutral-700 text-xs font-bold transition-all shadow-2xs disabled:opacity-50"
           >
             Cancel
           </button>

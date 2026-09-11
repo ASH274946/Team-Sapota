@@ -3,6 +3,7 @@ import { validatePaperOrThrow, type ValidatedPaper } from '../validators/paper.v
 import { logger } from '../utils/logger';
 import type { CanonicalPaperMetadata } from '../types/canonical.types';
 import { saveToQuestionBank } from './question-bank.service';
+import { getStorageAdapter } from './storage';
 
 export async function savePaper(
   assignmentId: string,
@@ -24,7 +25,7 @@ export async function savePaper(
   const saved = await prisma.generatedPaper.create({
     data: {
       assignmentId,
-          organizationId: existingAssignment.organizationId,
+      organizationId: existingAssignment.organizationId,
       title: validatedPaper.title,
       totalMarks: validatedPaper.totalMarks,
       duration: duration ?? 45,
@@ -34,11 +35,39 @@ export async function savePaper(
     },
   });
 
+  // Save generated assignment snapshot to R2 assignments/ folder
+  const storage = getStorageAdapter();
+  const assignmentStorageKey = `assignments/assignment-${assignmentId}-${saved.id}.json`;
+  const paperStorageKey = `question-papers/paper-${assignmentId}-${saved.id}.json`;
+
+  try {
+    const assignmentPayload = Buffer.from(JSON.stringify({
+      assignmentId,
+      paperId: saved.id,
+      title: validatedPaper.title,
+      totalMarks: validatedPaper.totalMarks,
+      duration: duration ?? 45,
+      sections: validatedPaper.sections,
+      canonicalMetadata,
+      savedAt: new Date().toISOString(),
+    }, null, 2));
+
+    await Promise.all([
+      storage.save(assignmentStorageKey, assignmentPayload, 'application/json'),
+      storage.save(paperStorageKey, assignmentPayload, 'application/json'),
+    ]);
+    logger.info(`[savePaper] Saved assignment & paper snapshots to R2: ${assignmentStorageKey}, ${paperStorageKey}`);
+  } catch (err) {
+    logger.warn(`[savePaper] Failed to write assignment snapshot to R2: ${err}`);
+  }
+
   await prisma.assignment.update({
     where: { id: assignmentId },
     data: {
       status: 'COMPLETED',
-      generationMeta: canonicalMetadata ? (canonicalMetadata as any) : undefined,
+      generationMeta: canonicalMetadata
+        ? { ...(canonicalMetadata as any), storageKey: assignmentStorageKey }
+        : { storageKey: assignmentStorageKey },
       finalizedAt: new Date(),
     },
   });

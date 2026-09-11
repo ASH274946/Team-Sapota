@@ -56,22 +56,24 @@ export const LibraryService = {
   },
 
   downloadResource: async (resource: LibraryResource) => {
-    if (resource.fileUrl?.startsWith('/uploads/')) {
-      const token = getApiToken();
-      const tokenQuery = token ? `?token=${token}` : '';
-      window.open(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'}/library/${resource.id}/download${tokenQuery}`, '_blank');
-    } else {
+    if (resource.fileUrl?.startsWith('http://') || resource.fileUrl?.startsWith('https://')) {
       window.open(resource.fileUrl, '_blank');
+      return;
     }
+    const token = getApiToken();
+    const tokenQuery = token ? `?token=${token}` : '';
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+    window.open(`${apiUrl}/library/${resource.id}/download${tokenQuery}`, '_blank');
   },
 
   viewResource: async (resource: LibraryResource) => {
-    if (resource.fileUrl?.startsWith('/uploads/')) {
-      const token = getApiToken();
-      const tokenQuery = token ? `?token=${token}` : '';
-      window.open(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'}/library/${resource.id}/view${tokenQuery}`, '_blank');
-    } else {
+    if (resource.fileUrl?.startsWith('http://') || resource.fileUrl?.startsWith('https://')) {
       window.open(resource.fileUrl, '_blank');
+      return;
     }
+    const token = getApiToken();
+    const tokenQuery = token ? `?token=${token}` : '';
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+    window.open(`${apiUrl}/library/${resource.id}/view${tokenQuery}`, '_blank');
   },
 };

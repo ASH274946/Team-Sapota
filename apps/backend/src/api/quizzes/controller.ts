@@ -13,9 +13,12 @@ import {
   serializeQuizHistory,
 } from './serializers';
 
+import { getStorageAdapter } from '../../services/storage';
+
 export const generateQuiz = async (req: Request, res: Response): Promise<void> => {
   const { topic, subject, difficulty, bloomLevel, count } = req.body;
   const orgId = getRequestOrgId(req);
+  const userId = getRequestUserId(req);
 
   const questions = await generateMultipleQuestions({
     topic,
@@ -26,7 +29,29 @@ export const generateQuiz = async (req: Request, res: Response): Promise<void> =
     organizationId: orgId,
   });
 
-  sendCreated(res, { questions, count: questions.length });
+  // Persist generated quiz questions to Cloudflare R2 in quizzes/ folder
+  const quizId = `quiz-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+  const storageKey = `quizzes/${quizId}.json`;
+  try {
+    const storage = getStorageAdapter();
+    const payload = Buffer.from(JSON.stringify({
+      quizId,
+      topic,
+      subject,
+      difficulty,
+      bloomLevel: bloomLevel ?? 'APPLY',
+      count: questions.length,
+      questions,
+      createdBy: userId,
+      organizationId: orgId,
+      generatedAt: new Date().toISOString(),
+    }, null, 2));
+    await storage.save(storageKey, payload, 'application/json');
+  } catch (err) {
+    // Non-blocking log
+  }
+
+  sendCreated(res, { questions, count: questions.length, storageKey });
 };
 
 export const listSessions = async (req: Request, res: Response): Promise<void> => {

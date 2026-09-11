@@ -132,11 +132,12 @@ export async function downloadPdfByAssignmentIdHandler(req: Request, res: Respon
 
     const storage = getPdfStorage();
     let data: Buffer | null = null;
-    let filename = paper.pdfUrl ? path.basename(paper.pdfUrl) : `paper-${paper.assignmentId}.pdf`;
+    const lookupKey = paper.pdfPath || (paper.pdfUrl ? path.basename(paper.pdfUrl) : `paper-${paper.assignmentId}.pdf`);
+    let filename = path.basename(lookupKey);
 
-    if (paper.pdfUrl) {
+    if (lookupKey) {
       try {
-        data = await storage.get(filename);
+        data = await storage.get(lookupKey);
       } catch {
         data = null;
       }

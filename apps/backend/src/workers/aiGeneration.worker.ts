@@ -77,17 +77,46 @@ function sanitizeText(text: string): string {
   return result;
 }
 
-async function extractUploadedContent(files: Array<{ path: string; mimeType: string }>): Promise<{ content: string; wasSanitized: boolean }> {
+import { getStorageAdapter } from '../services/storage';
+
+async function extractUploadedContent(files: Array<{ path: string; mimeType: string; storageKey?: string }>): Promise<{ content: string; wasSanitized: boolean }> {
   logger.debug(`[TRACE] extractUploadedContent: ${files.length} files`);
   const texts: string[] = [];
   let wasSanitized = false;
+  const storage = getStorageAdapter();
+
   for (const file of files) {
     try {
       const t0 = Date.now();
-      if (file.mimeType === 'application/pdf') {
-        logger.debug(`[TRACE] Reading PDF: ${file.path}`);
-        const buffer = await fs.readFile(file.path);
-        logger.debug(`[TRACE] PDF buffer: ${buffer.length} bytes, parsing...`);
+      let buffer: Buffer | null = null;
+
+      // 1. Try fetching from R2 if storageKey or path is an R2 key
+      const possibleKey = file.storageKey || (file.path && !file.path.includes(':\\') && !file.path.startsWith('/') ? file.path : null);
+      if (possibleKey) {
+        try {
+          buffer = await storage.get(possibleKey);
+        } catch {
+          buffer = null;
+        }
+      }
+
+      // 2. Fallback to local filesystem if not found in R2
+      if (!buffer && file.path) {
+        try {
+          buffer = await fs.readFile(file.path);
+        } catch {
+          // If local path fails, try storage with the basename
+          buffer = await storage.get(file.path);
+        }
+      }
+
+      if (!buffer) {
+        logger.warn(`[TRACE] Could not retrieve file content from R2 or local disk: ${file.path}`);
+        continue;
+      }
+
+      if (file.mimeType === 'application/pdf' || file.path.endsWith('.pdf')) {
+        logger.debug(`[TRACE] Reading PDF buffer: ${buffer.length} bytes, parsing...`);
         const parsed = await pdfParse(buffer);
         logger.debug(`[TRACE] PDF parsed: ${parsed.text?.length ?? 0} chars in ${Date.now() - t0}ms`);
         if (parsed.text && parsed.text.trim().length > 0) {
@@ -98,10 +127,9 @@ async function extractUploadedContent(files: Array<{ path: string; mimeType: str
         } else {
           logger.warn(`[TRACE] PDF extracted no text: ${file.path}`);
         }
-      } else if (file.mimeType === 'text/plain') {
-        logger.debug(`[TRACE] Reading TXT: ${file.path}`);
-        const raw = await fs.readFile(file.path, 'utf-8');
-        logger.debug(`[TRACE] TXT read: ${raw.length} chars in ${Date.now() - t0}ms`);
+      } else {
+        logger.debug(`[TRACE] Reading text content from buffer`);
+        const raw = buffer.toString('utf-8');
         if (raw && raw.trim().length > 0) {
           const clean = sanitizeText(raw);
           if (clean !== raw) wasSanitized = true;

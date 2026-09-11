@@ -4,4 +4,6 @@ export interface StorageAdapter {
   delete(key: string): Promise<void>;
   exists(key: string): Promise<boolean>;
   getPublicUrl(key: string): string;
+  getPresignedUploadUrl?(key: string, contentType: string, expiresInSeconds?: number): Promise<string>;
+  getSignedDownloadUrl?(key: string, expiresInSeconds?: number): Promise<string>;
 }

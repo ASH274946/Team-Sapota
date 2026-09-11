@@ -168,11 +168,22 @@ export const getPaperDownloadUrl = async (req: Request, res: Response): Promise<
   const paper = await prisma.generatedPaper.findUnique({ where: { id } });
   if (!paper) throw ApiError.notFound('Paper not found');
 
-  if (!paper.pdfUrl) {
+  if (!paper.pdfUrl && !paper.pdfPath) {
     throw ApiError.notFound('PDF not available for this paper');
   }
 
-  sendSuccess(res, { data: { id: paper.id, pdfUrl: paper.pdfUrl } });
+  let downloadUrl = paper.pdfUrl;
+  const storageKey = paper.pdfPath || paper.pdfUrl;
+  if (storageKey) {
+    try {
+      const { getR2Storage } = await import('../../services/storage/r2-storage');
+      downloadUrl = await getR2Storage().getSignedDownloadUrl(storageKey);
+    } catch {
+      downloadUrl = paper.pdfUrl;
+    }
+  }
+
+  sendSuccess(res, { data: { id: paper.id, pdfUrl: downloadUrl } });
 };
 
 export const getAnswerKey = async (req: Request, res: Response): Promise<void> => {

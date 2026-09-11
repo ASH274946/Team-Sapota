@@ -42,12 +42,15 @@ export default function CustomQuizGenerator() {
     fd.append('file', f);
     try {
       const res = await apiClient.post<{success:boolean, data:{content:string}}>('/generate/parse', fd);
-      setFormData(prev => ({ ...prev, context: res.data.data.content }));
-      toast.success('Document parsed!');
-    } catch {
-      toast.error('Failed to parse document');
+      const parsedContent = res.data?.data?.content || '';
+      setFormData(prev => ({ ...prev, context: parsedContent }));
+      toast.success('Document parsed successfully!');
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || err?.message || 'Failed to parse document';
+      toast.error(msg);
     } finally {
       setIsUploading(false);
+      e.target.value = '';
     }
   };
 
@@ -219,7 +222,7 @@ export default function CustomQuizGenerator() {
               }}>
                 {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Paperclip size={14} />}
                 {isUploading ? 'Parsing...' : 'Attach File'}
-                <input type="file" accept=".pdf,.txt" style={{display:'none'}} onChange={handleFileUpload} disabled={isUploading} />
+                <input type="file" accept=".pdf,.docx,.doc,.txt,.md,.png,.jpg,.jpeg,.webp,.csv" style={{display:'none'}} onChange={handleFileUpload} disabled={isUploading} />
               </label>
             </div>
           </div>

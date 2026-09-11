@@ -74,7 +74,7 @@ const envSchema = z.object({
     .transform((v) => (v && v.trim().length > 0 ? v.trim() : undefined)),
 
   // Upload / Storage
-  STORAGE_TYPE: z.enum(['local', 's3', 'cloudinary', 'supabase']).default('local'),
+  STORAGE_TYPE: z.enum(['local', 's3', 'r2', 'cloudinary', 'supabase']).default('local'),
   MAX_FILE_SIZE_MB: z.string().default('10').transform(Number),
   UPLOAD_DIR: z
     .string()
@@ -82,6 +82,11 @@ const envSchema = z.object({
     .transform((v) => (v.startsWith('/') || v.startsWith('./') ? v : `./${v}`)),
 
   // Cloud storage credentials (optional, used when STORAGE_TYPE !== 'local')
+  R2_ACCOUNT_ID: z.string().optional(),
+  R2_ACCESS_KEY_ID: z.string().optional(),
+  R2_SECRET_ACCESS_KEY: z.string().optional(),
+  R2_BUCKET_NAME: z.string().optional(),
+  R2_PUBLIC_DOMAIN: z.string().optional(),
   SUPABASE_URL: z.string().optional(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
   SUPABASE_BUCKET: z.string().optional(),

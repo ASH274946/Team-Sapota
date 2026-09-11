@@ -20,6 +20,7 @@ export async function generatePdf(paper: IGeneratedPaper): Promise<{ pdfPath: st
 
   const storage = getPdfStorage();
   const fileName = `paper-${paper.assignmentId.toString()}-${Date.now()}.pdf`;
+  const storageKey = `question-papers/${fileName}`;
 
   let browser;
   try {
@@ -52,11 +53,9 @@ export async function generatePdf(paper: IGeneratedPaper): Promise<{ pdfPath: st
         </div>`,
     });
 
-    const pdfUrl = await storage.save(fileName, pdfBuffer, 'application/pdf');
-    const pdfPath = pdfUrl.startsWith('http')
-      ? pdfUrl
-      : `${env.UPLOAD_DIR}/pdfs/${fileName}`;
-    logger.info(`PDF generated: ${fileName}`);
+    const pdfUrl = await storage.save(storageKey, pdfBuffer, 'application/pdf');
+    const pdfPath = storageKey;
+    logger.info(`Question paper PDF generated and saved to R2: ${storageKey}`);
     return { pdfPath, pdfUrl };
   } finally {
     if (browser) await browser.close();
@@ -228,6 +227,7 @@ export async function generateLessonPlanPdf(
     .replace(/[^a-zA-Z0-9\-_]/g, '-')
     .slice(0, 60);
   const fileName = `lesson-plan-${safeName}-${Date.now()}.pdf`;
+  const storageKey = `lesson-plans/${fileName}`;
 
   let browser;
   try {
@@ -257,12 +257,10 @@ export async function generateLessonPlanPdf(
         </div>`,
     });
 
-    const pdfUrl = await storage.save(fileName, pdfBuffer, 'application/pdf');
-    const pdfPath = pdfUrl.startsWith('http')
-      ? pdfUrl
-      : `${env.UPLOAD_DIR}/pdfs/${fileName}`;
+    const pdfUrl = await storage.save(storageKey, pdfBuffer, 'application/pdf');
+    const pdfPath = storageKey;
 
-    logger.info(`[PDF:LESSON_PLAN] Generated: ${fileName}`);
+    logger.info(`[PDF:LESSON_PLAN] Generated and saved to R2: ${storageKey}`);
     return { pdfPath, pdfUrl };
   } finally {
     if (browser) await browser.close();

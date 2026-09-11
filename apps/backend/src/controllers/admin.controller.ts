@@ -17,6 +17,8 @@ import { processCsvImport } from '../services/csv-import.service';
 import * as argon2 from 'argon2';
 import * as fs from 'fs';
 import * as path from 'path';
+import { getR2Storage } from '../services/storage/r2-storage';
+import { generateR2ObjectKey } from '../services/storage/key-generator';
 
 // ── In-Memory System Settings Store (Simulating Admin System Settings) ──
 let systemSettings = {
@@ -2699,8 +2701,44 @@ export class AdminController {
       let fileSize = 0;
 
       if (file) {
-        fileUrl = `/uploads/${file.filename}`;
         fileSize = file.size;
+        let buffer: Buffer | null = null;
+        if (file.path && fs.existsSync(file.path)) {
+          buffer = fs.readFileSync(file.path);
+        } else if (file.buffer) {
+          buffer = file.buffer;
+        }
+
+        const { key } = generateR2ObjectKey({
+          scope: 'knowledge',
+          entityId: req.user.id,
+          filename: file.originalname || file.filename || 'document.pdf',
+        });
+
+        let r2Success = false;
+        if (buffer) {
+          try {
+            const r2 = getR2Storage();
+            await r2.save(key, buffer, file.mimetype || 'application/octet-stream');
+            fileUrl = key;
+            r2Success = true;
+          } catch (r2Err: any) {
+            logger.error(`[Admin:createKnowledgeResource] R2 upload failed: ${r2Err.message}`);
+          }
+        }
+
+        if (!r2Success) {
+          const localUploadDir = path.resolve(process.env.UPLOAD_DIR || 'uploads');
+          if (!fs.existsSync(localUploadDir)) {
+            fs.mkdirSync(localUploadDir, { recursive: true });
+          }
+          const safeFilename = file.filename || `${Date.now()}-${file.originalname}`;
+          const targetLocalPath = path.join(localUploadDir, safeFilename);
+          if (buffer && !fs.existsSync(targetLocalPath)) {
+            fs.writeFileSync(targetLocalPath, buffer);
+          }
+          fileUrl = `/uploads/${safeFilename}`;
+        }
       }
 
       if (!fileUrl) {

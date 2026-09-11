@@ -5,6 +5,7 @@ import pdfParse from 'pdf-parse';
 import OpenAI from 'openai';
 import { env } from '../config/env';
 import { logger } from '../utils/logger';
+import { getR2Storage } from './storage/r2-storage';
 
 export interface FileExtractionResult {
   filename: string;
@@ -679,9 +680,46 @@ export async function extractTextFromFileBuffer(
     return await extractTextFromPdf(buffer, filename);
   }
 
-  // 5. Image files (PNG, JPG, JPEG, WEBP)
+  // 5. CSV and TSV spreadsheet/data files
+  if (ext === '.csv' || ext === '.tsv' || mime.includes('csv') || mime.includes('tab-separated')) {
+    const text = buffer.toString('utf8');
+    return text.trim();
+  }
+
+  // 6. JSON data files
+  if (ext === '.json' || mime === 'application/json') {
+    try {
+      const parsed = JSON.parse(buffer.toString('utf8'));
+      return JSON.stringify(parsed, null, 2);
+    } catch {
+      return buffer.toString('utf8').trim();
+    }
+  }
+
+  // 7. HTML / Web pages
+  if (ext === '.html' || ext === '.htm' || mime.includes('html')) {
+    const raw = buffer.toString('utf8');
+    // Strip HTML tags and keep content
+    const stripped = raw
+      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+      .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+    return stripped;
+  }
+
+  // 8. RTF Rich Text Format
+  if (ext === '.rtf' || mime.includes('rtf')) {
+    const raw = buffer.toString('utf8');
+    const stripped = raw.replace(/\\[a-z0-9-]+\s?/gi, ' ').replace(/[{}]/g, '').trim();
+    return stripped;
+  }
+
+  // 9. Image files (PNG, JPG, JPEG, WEBP, GIF, BMP, TIFF)
   if (
-    ['.png', '.jpg', '.jpeg', '.webp'].includes(ext) ||
+    ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.tiff'].includes(ext) ||
     mime.startsWith('image/')
   ) {
     const imageMime = mime.startsWith('image/') ? mime : ext === '.png' ? 'image/png' : 'image/jpeg';
@@ -692,8 +730,14 @@ export async function extractTextFromFileBuffer(
     return text.trim();
   }
 
+  // Fallback: If text-like buffer, attempt utf8 conversion
+  const rawUtf8 = buffer.toString('utf8');
+  if (rawUtf8 && /^[\x20-\x7E\r\n\t\u00A0-\uFFFF]{10,}$/.test(rawUtf8.slice(0, 500))) {
+    return rawUtf8.trim();
+  }
+
   throw new Error(
-    `Unsupported file type "${ext || mime}". Supported formats: PDF, PNG, JPG, JPEG, WEBP, DOCX, TXT, MD.`
+    `Unsupported file type "${ext || mime}". Supported formats: PDF, DOCX, DOC, PNG, JPG, JPEG, WEBP, TXT, MD, CSV, JSON, HTML.`
   );
 }
 
@@ -779,3 +823,24 @@ export async function processUploadedFiles(
     results,
   };
 }
+
+/**
+ * Extracts text directly from a file stored in Cloudflare R2 without saving to local disk.
+ */
+export async function extractTextFromR2(
+  key: string,
+  originalFilename?: string,
+  mimeType?: string
+): Promise<string> {
+  const r2 = getR2Storage();
+  const buffer = await r2.get(key);
+  if (!buffer) {
+    throw new Error(`File not found in R2 storage for key: ${key}`);
+  }
+
+  const filename = originalFilename || path.basename(key);
+  const type = mimeType || 'application/octet-stream';
+
+  return extractTextFromFileBuffer(buffer, filename, type);
+}
+

@@ -19,67 +19,66 @@ const storage = multer.diskStorage({
   },
 });
 
-const ALLOWED_EXTENSIONS = ['.pdf', '.txt', '.md', '.docx', '.doc', '.png', '.jpg', '.jpeg', '.webp'];
+// Explicitly blocked dangerous executable files
+const BLOCKED_EXTENSIONS = [
+  '.exe', '.bat', '.cmd', '.sh', '.ps1', '.msi', '.dll', '.vbs', '.com', '.scr', '.jar', '.bin', '.pif', '.cpl'
+];
 
-const ALLOWED_TYPES: Record<string, string[]> = {
-  '.pdf': ['application/pdf', 'application/x-pdf', 'application/octet-stream'],
-  '.txt': ['text/plain', 'text/x-plain', 'application/octet-stream'],
-  '.md': ['text/markdown', 'text/x-markdown', 'text/plain', 'application/octet-stream'],
-  '.docx': [
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/zip',
-    'application/x-zip-compressed',
-    'application/octet-stream',
-  ],
-  '.doc': ['application/msword', 'application/octet-stream'],
-  '.png': ['image/png', 'image/x-png', 'application/octet-stream'],
-  '.jpg': ['image/jpeg', 'image/pjpeg', 'application/octet-stream'],
-  '.jpeg': ['image/jpeg', 'image/pjpeg', 'application/octet-stream'],
-  '.webp': ['image/webp', 'application/octet-stream'],
-};
+// Comprehensive list of educational, document, presentation, media, and archive extensions
+const ALLOWED_EXTENSIONS = [
+  // Documents & Text
+  '.pdf', '.txt', '.md', '.markdown', '.docx', '.doc', '.odt', '.rtf', '.tex', '.epub', '.html', '.htm', '.csv', '.tsv', '.json',
+  // Presentations & Spreadsheets
+  '.ppt', '.pptx', '.odp', '.key', '.xls', '.xlsx', '.ods',
+  // Images
+  '.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg', '.bmp', '.tiff', '.ico',
+  // Audio & Video
+  '.mp4', '.webm', '.mov', '.avi', '.mkv', '.mp3', '.wav', '.m4a', '.aac', '.flac',
+  // Archives
+  '.zip', '.rar', '.tar', '.gz', '.7z'
+];
 
 function fileFilter(
   req: any,
   file: Express.Multer.File,
   cb: multer.FileFilterCallback
 ): void {
-  const fileExt = path.extname(file.originalname).toLowerCase();
+  const fileExt = path.extname(file.originalname || '').toLowerCase();
   const mime = (file.mimetype || '').toLowerCase();
 
-  // Validate extension is known
-  if (!ALLOWED_EXTENSIONS.includes(fileExt)) {
+  // 1. Immediately reject dangerous executable extensions
+  if (BLOCKED_EXTENSIONS.includes(fileExt)) {
     logger.warn({
       userId: req.user?.id || 'anonymous',
       fileName: file.originalname,
       mime,
       ext: fileExt,
-    }, '[Upload] Rejected file — extension not allowed');
-    cb(new Error(`File type not allowed. Supported extensions: ${ALLOWED_EXTENSIONS.join(', ')}`));
+    }, '[Upload] Rejected file — blocked executable extension');
+    cb(new Error(`Security violation: Executable files (${fileExt}) are strictly prohibited.`));
     return;
   }
 
-  const allowedMimes = ALLOWED_TYPES[fileExt];
-  // Allow if mime matches known list or if mime is generic/empty but extension is verified
-  const allowed = !allowedMimes || allowedMimes.length === 0 || allowedMimes.includes(mime) || !mime;
-
-  if (allowed) {
+  // 2. Validate known safe extension or accept generic files if extension is in ALLOWED_EXTENSIONS
+  if (ALLOWED_EXTENSIONS.includes(fileExt) || !fileExt) {
     cb(null, true);
-  } else {
-    logger.warn({
-      userId: req.user?.id || 'anonymous',
-      fileName: file.originalname,
-      mime,
-      ext: fileExt,
-    }, '[Upload] Rejected file — mime mismatch');
-    cb(new Error(`File type not allowed. Mime ${mime} does not match extension ${fileExt}`));
+    return;
   }
+
+  logger.warn({
+    userId: req.user?.id || 'anonymous',
+    fileName: file.originalname,
+    mime,
+    ext: fileExt,
+  }, '[Upload] Rejected file — extension not in allowed list');
+  
+  cb(new Error(`File format ${fileExt || 'unknown'} is not supported. Please upload standard document, presentation, media, or archive files.`));
 }
 
 export const uploadMiddleware = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB hard limit
+    fileSize: 50 * 1024 * 1024, // 50MB limit
     files: 10,
   },
 });

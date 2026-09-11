@@ -151,6 +151,7 @@ model Organization {
   programs           Program[]
   blueprints         Blueprint[]
   approvalRecords    ApprovalRecord[]
+  storedFiles        StoredFile[]
 }
 
 model Department {
@@ -227,6 +228,7 @@ model User {
   leaveApplications   LeaveApplication[]     @relation("LeaveApplications")
   tutorSessions       TutorSession[]
   libraryResources    LibraryResource[]
+  storedFiles         StoredFile[]           @relation("UserFiles")
 
   @@index([organizationId])
   @@index([departmentId])
@@ -1886,4 +1888,27 @@ model PracticeAttempt {
   @@index([quizId])
 }
 
+// ── Cloudflare R2 Stored File Metadata ──
 
+model StoredFile {
+  id             String        @id @default(uuid())
+  key            String        @unique // R2 object key
+  bucket         String
+  originalName   String
+  mimeType       String
+  sizeBytes      Int
+  scope          String        // 'STUDENT', 'TEACHER', 'ADMIN', 'BLOG', 'COURSE', 'SYLLABUS', 'ASSIGNMENT', 'DOCUMENT'
+  ownerId        String
+  owner          User          @relation("UserFiles", fields: [ownerId], references: [id], onDelete: Cascade)
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  entityId       String?       // e.g. courseId, blogId, assignmentId
+  isPublic       Boolean       @default(false)
+  metadata       Json?         @default("{}")
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([ownerId])
+  @@index([organizationId])
+  @@index([scope, entityId])
+}

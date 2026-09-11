@@ -18,6 +18,9 @@ import { buildCanonicalGenerationState } from '../services/canonical-metadata.se
 import { v4 as uuidv4 } from 'uuid';
 import { workflowEngine } from '../workflows/workflow-engine';
 
+import fs from 'fs';
+import { getStorageAdapter } from '../services/storage';
+
 export async function createAssignmentHandler(req: Request, res: Response): Promise<void> {
   const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
 
@@ -65,12 +68,28 @@ export async function createAssignmentHandler(req: Request, res: Response): Prom
     return;
   }
 
-  const files: FileRef[] = (req.files as Express.Multer.File[] ?? []).map((f) => ({
-    originalName: f.originalname,
-    storedName: f.filename,
-    mimeType: f.mimetype,
-    size: f.size,
-    path: f.path,
+  const storage = getStorageAdapter();
+  const rawFiles = (req.files as Express.Multer.File[] ?? []);
+  const files: FileRef[] = await Promise.all(rawFiles.map(async (f) => {
+    const filename = f.filename || f.originalname;
+    const storageKey = `uploads/${filename}`;
+    try {
+      const fileBuffer = f.buffer || (f.path && fs.existsSync(f.path) ? await fs.promises.readFile(f.path) : null);
+      if (fileBuffer) {
+        await storage.save(storageKey, fileBuffer, f.mimetype);
+        logger.info(`[createAssignment] Uploaded input file to R2: ${storageKey}`);
+      }
+    } catch (e) {
+      logger.warn(`[createAssignment] Could not upload input file to R2: ${e}`);
+    }
+    return {
+      originalName: f.originalname,
+      storedName: filename,
+      mimeType: f.mimetype,
+      size: f.size,
+      path: storageKey,
+      storageKey,
+    };
   }));
 
   const organizationId = requireRequestOrgId(req);

@@ -79,6 +79,20 @@ export default function KnowledgePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  const resetResourceForm = useCallback(() => {
+    setResourceTitle('');
+    setResourceDescription('');
+    setResourceCategory('Architecture');
+    setResourceType('DOCUMENT');
+    setExternalUrl('');
+    setSelectedFile(null);
+  }, []);
+
+  const closeAddResourceModal = () => {
+    resetResourceForm();
+    setIsAddResourceModalOpen(false);
+  };
+
   const fetchStats = useCallback(async () => {
     try {
       const response = await adminService.getKnowledgeStats();
@@ -133,14 +147,7 @@ export default function KnowledgePage() {
       });
 
       toast.success('Resource published to knowledge repository');
-      setIsAddResourceModalOpen(false);
-      // Reset form
-      setResourceTitle('');
-      setResourceDescription('');
-      setResourceCategory('Architecture');
-      setResourceType('DOCUMENT');
-      setExternalUrl('');
-      setSelectedFile(null);
+      closeAddResourceModal();
       fetchStats();
     } catch (err: any) {
       toast.error(err.response?.data?.error || err.message || 'Failed to create resource');
@@ -592,7 +599,7 @@ export default function KnowledgePage() {
                 <p className="text-xs text-neutral-500 mt-0.5">Upload a document to blob storage or link external materials</p>
               </div>
               <button 
-                onClick={() => setIsAddResourceModalOpen(false)}
+                onClick={closeAddResourceModal}
                 className="p-1.5 rounded-xl hover:bg-neutral-100 text-neutral-400 hover:text-neutral-700"
               >
                 <X className="w-4 h-4" />
@@ -704,7 +711,7 @@ export default function KnowledgePage() {
               <div className="flex gap-2 justify-end pt-3 border-t border-neutral-100">
                 <button 
                   type="button"
-                  onClick={() => setIsAddResourceModalOpen(false)}
+                  onClick={closeAddResourceModal}
                   className="px-4 py-2.5 bg-white hover:bg-neutral-50 border border-neutral-200/90 rounded-xl text-xs font-bold text-neutral-700 transition-all"
                 >
                   Cancel

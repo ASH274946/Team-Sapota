@@ -199,27 +199,32 @@ function AttemptPageContent() {
   if (!activeQuiz) return null;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', width: '100%', background: '#F9FAFB', overflowY: 'auto', position: 'absolute', inset: 0, zIndex: 10 }}>
-      {/* Fixed Header */}
-      <div style={{
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', width: '100%', background: '#F8FAFC', position: 'relative' }}>
+      {/* Sticky Quiz Header */}
+      <header style={{
         position: 'sticky',
         top: 0,
-        zIndex: 50,
+        zIndex: 40,
         background: '#ffffff',
-        borderBottom: '1px solid var(--border)',
-        padding: '16px 32px',
+        borderBottom: '1px solid #E2E8F0',
+        padding: '14px 28px',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)'
+        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.04)',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <button onClick={() => router.push('/student/practice')} className="btn btn-outline" style={{ display: 'flex', gap: 6, padding: '6px 12px', alignItems: 'center' }}>
+          <button 
+            type="button"
+            onClick={() => router.push('/student/practice')} 
+            className="btn btn-outline" 
+            style={{ display: 'flex', gap: 6, padding: '6px 12px', alignItems: 'center', fontSize: 13, fontWeight: 600 }}
+          >
             <ChevronLeft size={16} /> Exit
           </button>
           <div>
-            <h1 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', margin: 0 }}>{activeQuiz.topic} Quiz</h1>
-            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>{activeQuiz.subject} &middot; {activeQuiz.questions.length} Questions</p>
+            <h1 style={{ fontSize: 17, fontWeight: 800, color: '#0f172a', margin: 0, lineHeight: 1.2 }}>{activeQuiz.topic} Quiz</h1>
+            <p style={{ fontSize: 12, color: '#64748B', margin: '2px 0 0 0' }}>{activeQuiz.subject} &middot; {activeQuiz.questions.length} Questions</p>
           </div>
         </div>
 
@@ -228,22 +233,23 @@ function AttemptPageContent() {
             display: 'flex', 
             alignItems: 'center', 
             gap: 6, 
-            fontSize: 15, 
+            fontSize: 14, 
             fontWeight: 800, 
             color: activeQuiz.timeRemainingSeconds < 30 ? '#EF4444' : '#1E3A8A', 
             background: activeQuiz.timeRemainingSeconds < 30 ? '#FEE2E2' : '#EFF6FF',
-            padding: '8px 16px', 
+            padding: '6px 14px', 
             borderRadius: 8, 
             border: `1px solid ${activeQuiz.timeRemainingSeconds < 30 ? '#FECACA' : '#BFDBFE'}` 
           }}>
-            <Clock size={18} className={activeQuiz.timeRemainingSeconds < 30 ? 'animate-pulse' : ''} />
+            <Clock size={16} className={activeQuiz.timeRemainingSeconds < 30 ? 'animate-pulse' : ''} />
             <span>{formatTime(activeQuiz.timeRemainingSeconds)}</span>
           </div>
         </div>
-      </div>
+      </header>
 
-      <div style={{ flex: 1, padding: '32px 0 80px' }}>
-        <div style={{ maxWidth: 720, margin: '0 auto', padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {/* Questions Content Area */}
+      <main style={{ flex: 1, padding: '24px 20px 80px', width: '100%' }}>
+        <div style={{ maxWidth: 740, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
           {activeQuiz.isSubmitted && (
           <div className="card" style={{ textAlign: 'center', padding: '48px 24px', background: '#ECFDF5', borderColor: '#10B981' }}>
             <Award size={48} color="#10B981" style={{ margin: '0 auto 16px' }} />
@@ -404,8 +410,8 @@ function AttemptPageContent() {
             </button>
           </div>
         )}
-      </div>
-      </div>
+        </div>
+      </main>
     </div>
   );
 }
