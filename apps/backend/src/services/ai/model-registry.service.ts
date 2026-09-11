@@ -1,5 +1,5 @@
 export interface ModelConfig {
-  provider: 'openai' | 'nvidia' | 'groq';
+  provider: 'openai' | 'nvidia' | 'groq' | 'gemini';
   modelName: string;
   contextWindow: number;
   maxOutputTokens: number;
@@ -9,12 +9,21 @@ export interface ModelConfig {
 }
 
 export const ModelRegistry: Record<string, ModelConfig> = {
+  'gemini-2.5-flash': {
+    provider: 'gemini',
+    modelName: 'gemini-2.5-flash',
+    contextWindow: 1000000,
+    maxOutputTokens: 8000,
+    supportsVision: true,
+    supportsJSON: true,
+    tier: 'fast',
+  },
   'llama-3.1-70b-instruct': {
     provider: 'nvidia',
-    modelName: 'meta/llama-3.1-70b-instruct',
+    modelName: 'meta/llama-3.2-11b-vision-instruct',
     contextWindow: 128000,
     maxOutputTokens: 8000,
-    supportsVision: false,
+    supportsVision: true,
     supportsJSON: true,
     tier: 'reasoning',
   },
@@ -40,9 +49,19 @@ export const ModelRegistry: Record<string, ModelConfig> = {
 
 export class ModelRegistryService {
   static getModelForIntent(intent: string): ModelConfig {
-    // Basic routing logic
-    if (intent === 'GenerateQuestionPaper' || intent === 'EvaluateTypedAnswer') {
-      return ModelRegistry['llama-3.1-70b-instruct']; // Needs deep reasoning, use NVIDIA
+    if (['GenerateQuestionPaper', 'EvaluateAssignment', 'OCRPostProcessing'].includes(intent)) {
+      return ModelRegistry['gemini-2.5-flash'];
+    }
+    // Lesson plans and test papers go to Groq 120B for top quality, high speed, and native JSON
+    if (intent === 'GenerateLessonPlan' || intent === 'GenerateTestPaper') {
+      return ModelRegistry['gpt-oss-120b'];
+    }
+    if (
+      intent === 'GenerateQuestionPaper' ||
+      intent === 'EvaluateTypedAnswer' ||
+      intent === 'GenerateQuestionExplanation'
+    ) {
+      return ModelRegistry['llama-3.1-70b-instruct'];
     }
     return ModelRegistry['gpt-oss-120b']; // Fast low-latency generation, use Groq (gpt-oss-120b)
   }

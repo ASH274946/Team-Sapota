@@ -116,6 +116,8 @@ export async function downloadPdfHandler(req: Request, res: Response): Promise<v
 
 export async function downloadPdfByAssignmentIdHandler(req: Request, res: Response): Promise<void> {
   const { assignmentId } = req.params;
+  const type = (req.query.type as string) || 'both';
+
   try {
     const paper = await prisma.generatedPaper.findFirst({
       where: {
@@ -132,10 +134,10 @@ export async function downloadPdfByAssignmentIdHandler(req: Request, res: Respon
 
     const storage = getPdfStorage();
     let data: Buffer | null = null;
-    const lookupKey = paper.pdfPath || (paper.pdfUrl ? path.basename(paper.pdfUrl) : `paper-${paper.assignmentId}.pdf`);
+    const lookupKey = paper.pdfPath || (paper.pdfUrl ? path.basename(paper.pdfUrl) : `paper-${paper.assignmentId}${type !== 'both' ? `-${type}` : ''}.pdf`);
     let filename = path.basename(lookupKey);
 
-    if (lookupKey) {
+    if (lookupKey && type === 'both') {
       try {
         data = await storage.get(lookupKey);
       } catch {
@@ -144,18 +146,26 @@ export async function downloadPdfByAssignmentIdHandler(req: Request, res: Respon
     }
 
     if (!data) {
-      // PDF file doesn't exist on disk or pdfUrl was null -> generate on-the-fly!
-      logger.info(`[downloadPdfByAssignmentIdHandler] Generating PDF on demand for assignment ${paper.assignmentId}...`);
+      // PDF file doesn't exist on disk, pdfUrl was null, or specific type requested -> generate on-the-fly!
+      logger.info(`[downloadPdfByAssignmentIdHandler] Generating PDF on demand for assignment ${paper.assignmentId} (type: ${type})...`);
       try {
         const { generatePdf } = await import('../services/pdf.service');
-        const genResult = await generatePdf(paper as any);
-        filename = path.basename(genResult.pdfUrl);
-        data = await storage.get(filename);
+        const genResult = await generatePdf(paper as any, type as 'paper' | 'key' | 'both');
 
-        await prisma.generatedPaper.update({
-          where: { id: paper.id },
-          data: { pdfUrl: genResult.pdfUrl, pdfPath: genResult.pdfPath },
-        }).catch((e) => logger.warn(`Failed to update generatedPaper pdfUrl: ${e}`));
+        if (genResult.pdfBuffer) {
+          data = genResult.pdfBuffer;
+        } else {
+          filename = path.basename(genResult.pdfUrl);
+          data = await storage.get(filename);
+        }
+
+        // Only save to DB if it's the full paper ('both') to cache it
+        if (type === 'both' && genResult.pdfUrl) {
+          await prisma.generatedPaper.update({
+            where: { id: paper.id },
+            data: { pdfUrl: genResult.pdfUrl, pdfPath: genResult.pdfPath },
+          }).catch((e) => logger.warn(`Failed to update generatedPaper pdfUrl: ${e}`));
+        }
       } catch (genErr) {
         logger.error(`[downloadPdfByAssignmentIdHandler] On-demand PDF generation failed: ${genErr}`);
       }

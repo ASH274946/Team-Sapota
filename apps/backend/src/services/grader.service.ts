@@ -6,6 +6,7 @@ import { AIOrchestrator } from './ai/ai-orchestrator.service';
 import { logger } from '../utils/logger';
 import { retrieveContext } from './rag.service';
 import { invalidateCache } from '../api/common/cache';
+import { getPaper } from './paper.service';
 
 import { extractTextFromFileBuffer } from './document-extractor.service';
 
@@ -41,6 +42,11 @@ export async function evaluateSubmission(submissionId: string): Promise<any> {
   }
 
   const studentAnswerText = await extractTextFromFile(submission.fileUrl, submission.fileType);
+  const generatedPaper = await getPaper(submission.assignmentId).catch(() => null);
+  const generatedPaperSections = generatedPaper && Array.isArray(generatedPaper.sections) ? generatedPaper.sections as any[] : [];
+  const generatedPaperText = generatedPaperSections
+    .map((section: any) => `${section.title}\n${(Array.isArray(section.questions) ? section.questions : []).map((question: any) => `${question.question} (${question.marks} marks)`).join('\n')}`)
+    .join('\n\n');
 
   const rubricPrompt = config.rubric
     ? `Use the following AI-Structured Rubric Criteria to evaluate the student's submission.
@@ -72,6 +78,9 @@ export async function evaluateSubmission(submissionId: string): Promise<any> {
   }
 
   const prompt = [
+    'Question Paper:',
+    config.questionPaperText || generatedPaperText || 'No question paper was uploaded. Use the answer key and rubric.',
+    '',
     'Answer Key:',
     config.answerKeyText,
     '',

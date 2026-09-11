@@ -65,4 +65,44 @@ export const copilotService = {
     const response = await api.get(`/lessons/pdf-job/${jobId}`);
     return response.data.data;
   },
+
+  /**
+   * Generate an end-to-end academic test / exam paper with marking scheme.
+   */
+  generateTestPaper: async (data: {
+    subject: string;
+    topic: string;
+    grade?: string;
+    duration?: number;
+    totalMarks?: number;
+    difficulty?: string;
+    customInstructions?: string;
+  }) => {
+    const response = await api.post('/copilot/test-paper', data);
+    return response.data.data;
+  },
+
+  /**
+   * Get all generated test papers.
+   */
+  getTestPapers: async () => {
+    const response = await api.get('/copilot/test-papers');
+    return response.data.data;
+  },
+
+  /**
+   * Get a single test paper by ID.
+   */
+  getTestPaperById: async (id: string) => {
+    const response = await api.get(`/copilot/test-paper/${id}`);
+    return response.data.data;
+  },
+
+  /**
+   * Delete a test paper.
+   */
+  deleteTestPaper: async (id: string) => {
+    const response = await api.delete(`/copilot/test-paper/${id}`);
+    return response.data;
+  },
 };

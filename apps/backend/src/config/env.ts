@@ -62,6 +62,10 @@ const envSchema = z.object({
     .string()
     .optional()
     .transform((v) => (v && v.trim().length > 5 ? v.trim() : undefined)),
+  GEMINI_API_KEY: z
+    .string()
+    .optional()
+    .transform((v) => (v && v.trim().length > 5 ? v.trim() : undefined)),
 
   // Security
   JWT_SECRET: z.string().min(16, 'JWT_SECRET must be at least 16 characters'),
@@ -155,10 +159,11 @@ if (
   !parsed.data.OPENAI_API_KEY &&
   !parsed.data.ANTHROPIC_API_KEY &&
   !parsed.data.NVIDIA_API_KEY &&
-  !parsed.data.GROQ_API_KEY
+  !parsed.data.GROQ_API_KEY &&
+  !parsed.data.GEMINI_API_KEY
 ) {
   process.stderr.write(
     '⚠️  No AI provider API key configured. Assignment generation will fail. ' +
-    'Set at least one of: OPENAI_API_KEY, ANTHROPIC_API_KEY, NVIDIA_API_KEY, GROQ_API_KEY\n'
+    'Set at least one of: OPENAI_API_KEY, ANTHROPIC_API_KEY, NVIDIA_API_KEY, GROQ_API_KEY, GEMINI_API_KEY\n'
   );
 }
