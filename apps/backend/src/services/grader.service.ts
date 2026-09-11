@@ -8,38 +8,13 @@ import { logger } from '../utils/logger';
 import { retrieveContext } from './rag.service';
 import { invalidateCache } from '../api/common/cache';
 
+import { extractTextFromFileBuffer } from './document-extractor.service';
+
 export async function extractTextFromFile(filePath: string, fileType: string): Promise<string> {
   try {
-    const isPdf = fileType === 'PDF' || fileType === 'application/pdf';
-    const isImage = fileType.startsWith('image/') || ['.png', '.jpg', '.jpeg'].includes(path.extname(filePath).toLowerCase());
-    
-    if (isPdf) {
-      const buffer = await fs.readFile(filePath);
-      const parsed = await pdfParse(buffer);
-      return parsed.text || '';
-    }
-
-    if (isImage) {
-      const buffer = await fs.readFile(filePath);
-      const base64Image = buffer.toString('base64');
-      const mediaType = fileType === 'image/png' || filePath.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
-      
-      const result = await AIOrchestrator.generate({
-        intent: 'OCRPostProcessing',
-        context: '',
-        taskInstructions: 'Please transcribe all the handwritten or printed text in this image accurately. Do not add any extra commentary, just return the text exactly as it appears.',
-        media: [
-          {
-            type: 'image_url',
-            url: `data:${mediaType};base64,${base64Image}`
-          }
-        ]
-      });
-      return result || '';
-    }
-    
-    // Fallback for TXT/DOCX/other types
-    return await fs.readFile(filePath, 'utf-8');
+    const buffer = await fs.readFile(filePath);
+    const filename = path.basename(filePath);
+    return await extractTextFromFileBuffer(buffer, filename, fileType);
   } catch (error) {
     logger.error({ error, filePath, fileType }, 'Failed to extract text from file');
     return '';

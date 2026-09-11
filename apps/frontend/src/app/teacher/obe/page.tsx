@@ -30,7 +30,8 @@ import {
   Trash2,
   Edit3,
   FileUp,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Clock
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { COPOMatrix, COPOMatrixData, MatrixRowItem, CourseOutcomeItem, ProgramOutcomeItem } from '@/components/obe/COPOMatrix';
@@ -143,12 +144,25 @@ export default function TeacherOBEPage() {
   const [showSarModal, setShowSarModal] = useState(false);
   const [editingUnit, setEditingUnit] = useState<SyllabusUnit | null>(null);
 
+interface UploadedFileItem {
+  id: string;
+  file: File;
+  name: string;
+  size: number;
+  originalIndex: number;
+  status: 'waiting' | 'extracting' | 'queued' | 'success' | 'failed';
+  attempts: number;
+  extractedText?: string;
+  error?: string;
+}
+
   // Input Form States
   const [newCourse, setNewCourse] = useState({ name: '', code: '', description: '' });
   const [newUnit, setNewUnit] = useState({ title: '', topics: '', coMapped: 'CO1', bloomLevel: 'UNDERSTAND' as BloomLevel, hours: 10 });
   const [importText, setImportText] = useState('');
-  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const [uploadedFilesList, setUploadedFilesList] = useState<UploadedFileItem[]>([]);
   const [isExtractingFile, setIsExtractingFile] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
   const [newCO, setNewCO] = useState({ code: '', description: '', bloomLevel: 'UNDERSTAND' as BloomLevel });
   const [newPO, setNewPO] = useState({ code: '', description: '' });
   const [newBlueprint, setNewBlueprint] = useState({ title: '', totalMarks: 100 });
@@ -672,108 +686,628 @@ export default function TeacherOBEPage() {
     toast.success('Unit removed');
   };
 
-  // Multi-Format File Reader & Text Extractor (PDF, Image, DOC, TXT)
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Maximum retry cycles per file before marking as permanently failed (Strict limit: 2 attempts)
+  const MAX_EXTRACTION_RETRIES = 2;
+  const MAX_CONCURRENT_EXTRACTIONS = 3;
 
-    setUploadedFileName(file.name);
-    setIsExtractingFile(true);
-    toast.loading(`📄 AI Extracting Syllabus Units from ${file.name}...`, { id: 'fileextract' });
+  /**
+   * Fast client-side image normalizer:
+   * Scales high-res camera/phone photos (>1600px) down to an optimal OCR dimension (~1600px)
+   * while keeping sharp high-contrast text and reducing payload size from 5-10MB to ~200-300KB.
+   */
+  const preprocessImageForOcr = async (file: File): Promise<File> => {
+    const isImage = file.type.startsWith('image/') || /\.(png|jpe?g|webp)$/i.test(file.name);
+    if (!isImage || typeof window === 'undefined') return file;
 
-    const cleanName = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+    return new Promise((resolve) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
 
-    if (file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const text = `Unit 1: Fundamentals of ${cleanName}\nTopics: Core concepts, architecture, memory model, preliminary analysis\nUnit 2: Implementation & Structure of ${cleanName}\nTopics: Data structures, dynamic allocations, error handling, operations\nUnit 3: Analysis & Optimization\nTopics: Algorithmic complexity, system balance, performance tuning\nUnit 4: Advanced Systems & Integration\nTopics: Distributed models, graph traversals, dynamic execution\nUnit 5: Case Studies & Industry Applications\nTopics: Real-world engineering problems, security, design patterns`;
-        setImportText(text);
-        setIsExtractingFile(false);
-        toast.success(`⚡ Extracted Syllabus Units from Image (${file.name})!`, { id: 'fileextract' });
-      };
-      reader.readAsDataURL(file);
-    } else {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const rawContent = (event.target?.result as string) || '';
-        let text = rawContent.replace(/[^\x20-\x7E\n\r\t]/g, ' ');
-        if (!text.trim() || text.length < 25) {
-          text = `Unit 1: Fundamentals of ${cleanName}\nTopics: Core concepts, architecture, memory model, preliminary analysis\nUnit 2: Implementation & Structure of ${cleanName}\nTopics: Data structures, dynamic allocations, error handling, operations\nUnit 3: Analysis & Optimization\nTopics: Algorithmic complexity, system balance, performance tuning\nUnit 4: Advanced Systems & Integration\nTopics: Distributed models, graph traversals, dynamic execution\nUnit 5: Case Studies & Industry Applications\nTopics: Real-world engineering problems, security, design patterns`;
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const MAX_DIM = 1600;
+        let { width, height } = img;
+
+        // Skip resizing if already within target resolution and size is small
+        if (width <= MAX_DIM && height <= MAX_DIM && file.size < 1.5 * 1024 * 1024) {
+          return resolve(file);
         }
-        setImportText(text);
-        setIsExtractingFile(false);
-        toast.success(`⚡ Extracted ${text.split('\n').length} Lines from File (${file.name})!`, { id: 'fileextract' });
+
+        if (width > MAX_DIM || height > MAX_DIM) {
+          if (width > height) {
+            height = Math.round((height * MAX_DIM) / width);
+            width = MAX_DIM;
+          } else {
+            width = Math.round((width * MAX_DIM) / height);
+            height = MAX_DIM;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return resolve(file);
+
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+
+        // White background for transparent PNGs
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const isPng = file.type === 'image/png' || file.name.toLowerCase().endsWith('.png');
+        const outputMime = isPng ? 'image/png' : 'image/jpeg';
+        const quality = 0.92;
+
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) return resolve(file);
+            const ext = isPng ? 'png' : 'jpg';
+            const cleanBase = file.name.replace(/\.[^.]+$/, '');
+            const optimizedFile = new File([blob], `${cleanBase}.${ext}`, { type: outputMime });
+            resolve(optimizedFile);
+          },
+          outputMime,
+          quality
+        );
       };
-      reader.readAsText(file);
+
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        resolve(file);
+      };
+
+      img.src = url;
+    });
+  };
+
+  /**
+   * Detects if an individual line contains AI-generated image descriptions,
+   * visual appearance observations, mobile UI noise, or status bar indicators.
+   */
+  const isImageDescriptionNoise = (line: string): boolean => {
+    const trimmed = line.trim();
+    if (!trimmed) return true;
+
+    // 1. Image / Screenshot conversational opening & observational statements
+    if (
+      /^(?:the\s+(?:image|screenshot|photo|document|picture|graphic)\s+(?:shows|appears\s+to|contains|is|features|depicts|displays|seems\s+to|illustrates|presents|includes|consists\s+of)|in\s+the\s+(?:image|screenshot|photo|picture|graphic)|this\s+(?:image|screenshot|photo|picture)\s+(?:shows|contains|displays|presents|depicts|appears)|overall,?\s+the\s+(?:image|screenshot|photo|picture)|from\s+the\s+(?:image|screenshot|photo|picture)|based\s+on\s+the\s+(?:image|screenshot|photo)|as\s+seen\s+in\s+the\s+(?:image|screenshot)|looking\s+at\s+the\s+(?:image|screenshot))/i.test(
+        trimmed
+      )
+    ) {
+      return true;
+    }
+
+    // 2. Spatial UI / layout descriptions (e.g. "The title at the top reads...", "At the bottom of the screen...", "The background of the image is...")
+    if (
+      /^(?:the\s+title\s+(?:at\s+the\s+top\s+)?reads|below\s+the\s+title|at\s+the\s+(?:top|bottom|left|right|center)\s+of\s+the\s+(?:screen|image|page|document|picture)|on\s+the\s+(?:top|bottom|left|right)\s+(?:side|corner|portion)?|the\s+background\s+(?:of\s+the\s+image\s+)?is|the\s+header\s+(?:at\s+the\s+top\s+)?(?:shows|reads|displays)|the\s+footer\s+(?:shows|reads|displays))/i.test(
+        trimmed
+      )
+    ) {
+      return true;
+    }
+
+    // 3. Mobile device UI, status bar, signal, battery, wifi, navigation bar descriptions
+    if (
+      /^(?:battery(?:\s*:\s*\d+%|\s+level|\s+percentage|\s+icon)?|wi-?fi(?:\s+icon|\s+signal)?|signal\s+strength|network\s+status|navigation\s+bar|notification\s+bar|status\s+bar|system\s+icons?)\b/i.test(
+        trimmed
+      )
+    ) {
+      return true;
+    }
+
+    // 4. Standalone status bar clock/signal/battery lines (e.g., "12:45 PM | 100% | 5G" or "9:41 AM 4G 100%")
+    if (
+      /^(?:\d{1,2}:\d{2}(?:\s?[ap]m)?[\s|•·/,-]*)?(?:(?:\d{1,3}%|wifi|wi-fi|lte|4g|5g|volte|battery|signal|bluetooth|alarm|mute)[\s|•·/,-]*)+$/i.test(
+        trimmed
+      )
+    ) {
+      return true;
+    }
+
+    // 5. General AI assistant chatter / disclaimers
+    if (
+      /^(?:here\s+(?:is|are|'s)\s+(?:the\s+)?(?:actual\s+)?(?:transcribed|extracted|syllabus|lesson\s+plan|text)[^:\n]*:?|note:\s*|please\s+note\s+that|let\s+me\s+know\s+if|i\s+hope\s+this\s+helps|please\s+check\s+the\s+course\s+website)\b/i.test(
+        trimmed
+      )
+    ) {
+      return true;
+    }
+
+    return false;
+  };
+
+  /**
+   * Detects if a line contains standalone administrative/calendar/activity entries
+   * (e.g. Revision of Mid-1, Mid Exams, Seminars, Campus Drive, leave adjustment, UI topic counts)
+   * rather than authentic syllabus topics.
+   */
+  const isActivityOrJunkLine = (line: string): boolean => {
+    const t = line.trim();
+    if (!t) return true;
+
+    // 1. UI metadata like '10 Topics', '25 Topics', '1 Topic', '8 Topics'
+    if (/^\d+\s*Topics?$/i.test(t)) return true;
+
+    // 2. Administrative / standalone activity entries
+    if (
+      /^(?:Revision(?:\s*(?:of\s*)?Mid[-\s]?\d*|\s*\d+)?|Mid\s*Exams?\s*\d*|Mid\s*Revision\s*\d*|Seminar(?:\s+.*|\s*\d+)?|Campus\s*Drive|leave\s+adjusted(?:\s+.*)?|REVISION\s*\d*)$/i.test(
+        t
+      )
+    ) {
+      return true;
+    }
+
+    // 3. Test / dummy tokens
+    if (/^(?:test\s*\d*|introduction(?:to)?\s*big\s*data|dummy\s*\d*|sample\s*\d*)$/i.test(t)) {
+      return true;
+    }
+
+    return false;
+  };
+
+  /**
+   * Checks whether a detected unit number or title represents an invalid, dummy,
+   * or activity-based pseudo-unit (e.g., Unit 1: Revision of Mid-1, Unit 999: Custom Unit).
+   */
+  const isInvalidUnitHeading = (num: number | undefined, title: string): boolean => {
+    if (num === undefined || num <= 0 || num > 50) return true;
+    if (num === 999 || num === 9999) return true;
+
+    const cleanTitle = (title || '').trim().toLowerCase();
+    if (
+      /^(?:revision(?:\s*(?:of\s*)?mid[-\s]?\d*|\s*\d+)?|mid\s*(?:exams?|term|revisions?)[-\s]?\d*|seminars?|campus\s*drive|leave\s*adjusted|custom\s*unit|test\s*\d*|crt\s*revision)/i.test(
+        cleanTitle
+      )
+    ) {
+      return true;
+    }
+    return false;
+  };
+
+  interface StructuredUnitItem {
+    unitNumber: number;
+    title: string;
+    topics: string[];
+  }
+
+  /**
+   * Robust syllabus structure parser:
+   * Identifies legitimate syllabus units, filters out unrelated activities/dummy units,
+   * merges overlapping unit fragments across multiple uploaded pages, and dedupes topics.
+   */
+  const parseAndStructureSyllabus = (rawText: string): StructuredUnitItem[] => {
+    if (!rawText || !rawText.trim()) return [];
+
+    const rawLines = rawText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const unitHeaderRegex = /^(?:\*|\-)?\s*(?:\*{1,3}|_{1,3})?\s*(?:Unit|Module|Chapter|Part|Section)\s*([0-9IVXLCDM]+|[a-zA-Z]+)?\s*[:\-\—\.\)]\s*(.*?)(?:\*{1,3}|_{1,3})?$/i;
+    const unitHeaderStandaloneRegex = /^(?:\*|\-)?\s*(?:\*{1,3}|_{1,3})?\s*(?:Unit|Module|Chapter|Part|Section)\s*([0-9IVXLCDM]+)\s*(?:\*{1,3}|_{1,3})?$/i;
+
+    const unitsMap = new Map<number, { title: string; topics: string[] }>();
+    let currentUnitNum: number | null = null;
+
+    for (const line of rawLines) {
+      if (isImageDescriptionNoise(line)) continue;
+
+      const match = line.match(unitHeaderRegex);
+      const standMatch = line.match(unitHeaderStandaloneRegex);
+
+      if (match || standMatch) {
+        const numStr = match ? match[1] || '' : standMatch![1] || '';
+        const titleStr = match ? match[2] || '' : '';
+
+        let num: number | undefined;
+        if (/^[0-9]+$/.test(numStr)) {
+          num = parseInt(numStr, 10);
+        } else if (/^[IVXLCDM]+$/i.test(numStr)) {
+          const rMap: Record<string, number> = { I: 1, V: 5, X: 10, L: 50, C: 100 };
+          num = rMap[numStr.toUpperCase()] || 1;
+        }
+
+        if (num && !isInvalidUnitHeading(num, titleStr)) {
+          currentUnitNum = num;
+          let cleanTitle = titleStr.replace(/^[:\-\—\.\)\s]+/, '').replace(/[\*_]/g, '').trim();
+          if (!cleanTitle) cleanTitle = `UNIT ${num}`;
+
+          if (!unitsMap.has(num)) {
+            unitsMap.set(num, { title: cleanTitle, topics: [] });
+          } else {
+            const existing = unitsMap.get(num)!;
+            if (cleanTitle !== `UNIT ${num}` && (existing.title === `UNIT ${num}` || cleanTitle.length > existing.title.length)) {
+              existing.title = cleanTitle;
+            }
+          }
+        } else {
+          currentUnitNum = null;
+        }
+        continue;
+      }
+
+      if (currentUnitNum && unitsMap.has(currentUnitNum)) {
+        if (isActivityOrJunkLine(line)) continue;
+
+        let cleanTopic = line
+          .replace(/^[•\*\-\+\>\#\d\.\)\s]+/, '')
+          .replace(/[\*_]/g, '')
+          .replace(/[,\-\–\s]+$/, '')
+          .trim();
+
+        if (cleanTopic.length > 1) {
+          const unitObj = unitsMap.get(currentUnitNum)!;
+          if (!unitObj.topics.some((t) => t.toLowerCase() === cleanTopic.toLowerCase())) {
+            unitObj.topics.push(cleanTopic);
+          }
+        }
+      }
+    }
+
+    const sorted = Array.from(unitsMap.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([num, u]) => ({
+        unitNumber: num,
+        title: u.title,
+        topics: u.topics,
+      }));
+
+    return sorted;
+  };
+
+  /**
+   * Formats structured units into standard syllabus outline format.
+   */
+  const formatSyllabusForDisplay = (units: StructuredUnitItem[]): string => {
+    if (!units || units.length === 0) return '';
+    return units
+      .map((u) => {
+        const header = `Unit ${u.unitNumber}: ${u.title}`;
+        const topicList = u.topics.map((t) => `- ${t}`).join('\n');
+        return `${header}\n${topicList}`;
+      })
+      .join('\n\n');
+  };
+
+  /**
+   * Client-side post-processing: removes AI reasoning blocks, markdown fences, image descriptions,
+   * device UI noise, and disclaimers while strictly preserving syllabus/lesson-plan text.
+   */
+  const cleanFrontendSyllabusText = (rawText: string): string => {
+    if (!rawText) return '';
+
+    let text = rawText;
+
+    // Remove <think>...</think> reasoning blocks
+    text = text.replace(/<think>[\s\S]*?<\/think>/gi, '');
+
+    // Strip wrapping markdown code blocks if the whole response is enclosed in backticks
+    text = text.replace(/^```(?:markdown|text)?\r?\n([\s\S]*?)\r?\n```$/i, '$1');
+
+    // Filter line by line to eliminate AI-generated image descriptions and device UI noise
+    const lines = text.split(/\r?\n/);
+    const filteredLines = lines.filter((line) => !isImageDescriptionNoise(line));
+
+    text = filteredLines.join('\n');
+
+    // Remove separator lines
+    text = text.replace(/^={3,}\s*.*?\s*={3,}$/gm, '');
+
+    // Clean excessive blank lines
+    text = text.replace(/\n{3,}/g, '\n\n');
+
+    return text.trim();
+  };
+
+  /**
+   * Checks if extracted text has genuine syllabus content and is not empty or residual noise.
+   */
+  const isMeaningfulSyllabusText = (text: string): boolean => {
+    if (!text || typeof text !== 'string') return false;
+    const cleaned = cleanFrontendSyllabusText(text);
+    if (!cleaned || cleaned.length < 5) return false;
+
+    const alphaNumericCount = (cleaned.match(/[a-zA-Z0-9]/g) || []).length;
+    if (alphaNumericCount < 4) return false;
+
+    const lines = cleaned.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const validSyllabusLines = lines.filter((l) => !isImageDescriptionNoise(l) && !isActivityOrJunkLine(l));
+
+    return validSyllabusLines.length > 0;
+  };
+
+  // Multi-Format File Reader & Queue-Based Text Extractor with Resilient Retries and Bounded Concurrency
+  const processUploadedFiles = async (files: File[]) => {
+    if (!files || files.length === 0) return;
+
+    const allowedExtensions = ['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.txt', '.doc', '.docx', '.md'];
+    const validFiles: File[] = [];
+    const invalidFiles: string[] = [];
+
+    for (const f of files) {
+      const ext = '.' + f.name.split('.').pop()?.toLowerCase();
+      if (allowedExtensions.includes(ext)) {
+        validFiles.push(f);
+      } else {
+        invalidFiles.push(f.name);
+      }
+    }
+
+    if (invalidFiles.length > 0) {
+      toast.error(`Unsupported file(s): ${invalidFiles.join(', ')}. Supported: PDF, PNG, JPG, DOCX, TXT, MD`);
+    }
+
+    if (validFiles.length === 0) return;
+
+    // Create unique new items tracking their original file selection index
+    const startIndex = uploadedFilesList.length;
+    const newItems: UploadedFileItem[] = validFiles.map((f, idx) => ({
+      id: `file-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 7)}`,
+      file: f,
+      name: f.name,
+      size: f.size,
+      originalIndex: startIndex + idx,
+      status: 'waiting',
+      attempts: 0,
+    }));
+
+    const combinedFiles = [...uploadedFilesList, ...newItems];
+    setUploadedFilesList(combinedFiles);
+    setIsExtractingFile(true);
+
+    // Maintain a local mutable map to avoid stale React closures during asynchronous queue cycles
+    const itemsMap = new Map<string, UploadedFileItem>();
+    combinedFiles.forEach((item) => itemsMap.set(item.id, { ...item }));
+
+    // Processing queue holding file IDs in FIFO order
+    const processingQueue: string[] = newItems.map((item) => item.id);
+
+    // Reassembles the final extracted syllabus text preserving original upload order and clean structure
+    const updateCombinedImportText = () => {
+      const allExtracted = Array.from(itemsMap.values())
+        .filter((it) => it.status === 'success' && it.extractedText && isMeaningfulSyllabusText(it.extractedText))
+        .sort((a, b) => a.originalIndex - b.originalIndex)
+        .map((it) => cleanFrontendSyllabusText(it.extractedText!));
+
+      if (allExtracted.length > 0) {
+        const rawJoined = allExtracted.join('\n\n');
+        const structured = parseAndStructureSyllabus(rawJoined);
+        if (structured.length > 0) {
+          setImportText(formatSyllabusForDisplay(structured));
+        } else {
+          setImportText(rawJoined);
+        }
+      }
+    };
+
+    // Helper to synchronize local map to React state
+    const syncState = () => {
+      setUploadedFilesList(Array.from(itemsMap.values()));
+    };
+
+    // Worker routine executing jobs from the queue with bounded concurrency
+    const runWorker = async () => {
+      while (processingQueue.length > 0) {
+        const currentId = processingQueue.shift();
+        if (!currentId) break;
+
+        const item = itemsMap.get(currentId);
+        if (!item || item.status === 'success') {
+          continue;
+        }
+
+        // Mark file as EXTRACTING
+        item.status = 'extracting';
+        item.attempts += 1;
+        itemsMap.set(currentId, { ...item });
+        syncState();
+
+        const attemptLabel = item.attempts > 1 ? ` (Retry ${item.attempts}/${MAX_EXTRACTION_RETRIES})` : '';
+        toast.loading(`📄 Extracting${attemptLabel}: ${item.name}...`, { id: 'fileextract' });
+
+        let isSuccess = false;
+        let cleanedText = '';
+        let extractionError = '';
+
+        try {
+          // Preprocess/downscale images client-side before network upload for 5-10x speedup
+          const processedFile = await preprocessImageForOcr(item.file);
+          const formData = new FormData();
+          formData.append('file', processedFile);
+
+          const res = await api.post<{
+            success: boolean;
+            data: {
+              content: string;
+              results: Array<{
+                filename: string;
+                fileType: string;
+                status: 'success' | 'error';
+                extractedText?: string;
+                error?: string;
+              }>;
+            };
+          }>('/generate/parse', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+
+          if (res.data?.success && res.data?.data) {
+            const fileResult = res.data.data.results?.[0];
+            const rawExtracted = fileResult?.extractedText || res.data.data.content || '';
+
+            // Post-processing cleanup to eliminate any residual image descriptions or noise
+            cleanedText = cleanFrontendSyllabusText(rawExtracted);
+
+            if (isMeaningfulSyllabusText(cleanedText) && fileResult?.status !== 'error') {
+              isSuccess = true;
+            } else {
+              extractionError = fileResult?.error || 'Extraction contained only image descriptions or no syllabus text';
+            }
+          } else {
+            extractionError = 'Invalid server response';
+          }
+        } catch (err: any) {
+          extractionError = err.response?.data?.error || err.message || 'Network / extraction error';
+        }
+
+        if (isSuccess) {
+          // SUCCESS: Mark completed, store text, update combined syllabus text in original order
+          item.status = 'success';
+          item.extractedText = cleanedText;
+          item.error = undefined;
+          itemsMap.set(currentId, { ...item });
+          syncState();
+          updateCombinedImportText();
+        } else {
+          // FAILED THIS ATTEMPT:
+          item.error = extractionError;
+
+          if (item.attempts < MAX_EXTRACTION_RETRIES) {
+            // Re-enqueue at the END of the queue, mark as QUEUED with YELLOW badge
+            item.status = 'queued';
+            itemsMap.set(currentId, { ...item });
+            syncState();
+            // Push to the end of the processing queue so all other files process first
+            processingQueue.push(currentId);
+          } else {
+            // Reached max retries (2 attempts) -> mark as final FAILED with RED badge and terminate retry cycle
+            item.status = 'failed';
+            itemsMap.set(currentId, { ...item });
+            syncState();
+          }
+        }
+      }
+    };
+
+    // Spawn bounded concurrent worker pool
+    const activeConcurrency = Math.min(MAX_CONCURRENT_EXTRACTIONS, newItems.length);
+    const workerPromises = Array.from({ length: activeConcurrency }, () => runWorker());
+    await Promise.all(workerPromises);
+
+    setIsExtractingFile(false);
+
+    const allItems = Array.from(itemsMap.values());
+    const finalSuccess = allItems.filter((i) => i.status === 'success').length;
+    const finalFailed = allItems.filter((i) => i.status === 'failed').length;
+
+    if (finalFailed === 0 && finalSuccess > 0) {
+      toast.success(`⚡ Successfully extracted syllabus text from all ${finalSuccess} file(s)!`, { id: 'fileextract' });
+    } else if (finalSuccess > 0 && finalFailed > 0) {
+      toast.success(`Extracted content from ${finalSuccess} file(s). ${finalFailed} file(s) failed after retries.`, { id: 'fileextract' });
+    } else {
+      toast.error(`Failed to extract text from uploaded files after retries.`, { id: 'fileextract' });
     }
   };
 
-  // Import / Parse Syllabus Text
+  const openImportSyllabusModal = () => {
+    setImportText('');
+    setUploadedFilesList([]);
+    setIsExtractingFile(false);
+    setIsDragOver(false);
+    setShowImportSyllabusModal(true);
+  };
+
+  const closeAndResetImportModal = () => {
+    setImportText('');
+    setUploadedFilesList([]);
+    setIsExtractingFile(false);
+    setIsDragOver(false);
+    setShowImportSyllabusModal(false);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files ? Array.from(e.target.files) : [];
+    if (files.length > 0) {
+      processUploadedFiles(files);
+      e.target.value = '';
+    }
+  };
+
+  const handleRemoveUploadedFile = (id: string) => {
+    const updated = uploadedFilesList.filter((f) => f.id !== id);
+    setUploadedFilesList(updated);
+    if (updated.length === 0) {
+      setImportText('');
+    } else {
+      const successfulTexts = updated
+        .filter((it) => it.status === 'success' && it.extractedText && isMeaningfulSyllabusText(it.extractedText))
+        .sort((a, b) => a.originalIndex - b.originalIndex)
+        .map((it) => cleanFrontendSyllabusText(it.extractedText!));
+      if (successfulTexts.length > 0) {
+        const rawJoined = successfulTexts.join('\n\n');
+        const structured = parseAndStructureSyllabus(rawJoined);
+        setImportText(structured.length > 0 ? formatSyllabusForDisplay(structured) : rawJoined);
+      } else {
+        setImportText('');
+      }
+    }
+  };
+
+  // Structured Multi-Stage Syllabus Parser and Deduplication Algorithm
   const handleImportSyllabus = () => {
     if (!importText.trim()) {
-      toast.error('Please paste syllabus text to import');
+      toast.error('Please paste or extract syllabus text to import');
       return;
     }
 
-    const lines = importText.split('\n').filter((l) => l.trim().length > 0);
-    const parsedUnits: SyllabusUnit[] = [];
-    let currentUnit: { title?: string; topics?: string[] } | null = null;
-    let unitCount = syllabusUnits.length;
+    const bloomLevels: BloomLevel[] = ['UNDERSTAND', 'APPLY', 'ANALYZE', 'EVALUATE', 'CREATE'];
 
-    lines.forEach((line) => {
-      if (/unit|chapter|module/i.test(line)) {
-        if (currentUnit && currentUnit.title) {
-          parsedUnits.push({
-            id: `unit-${Date.now()}-${unitCount}`,
-            unitNumber: ++unitCount,
-            title: currentUnit.title,
-            topics: currentUnit.topics && currentUnit.topics.length > 0 ? currentUnit.topics : ['General Syllabus Topics'],
-            coMapped: `CO${(unitCount % 5) + 1}`,
-            bloomLevel: 'APPLY',
-            hours: 10,
-            status: 'UPCOMING'
-          });
+    // 1. Try structured extraction
+    const structured = parseAndStructureSyllabus(importText);
+
+    if (structured.length > 0 && structured.some((u) => u.topics.length > 0)) {
+      const parsedUnits: SyllabusUnit[] = structured.map((cand, idx) => {
+        const seqUnitNumber = cand.unitNumber || idx + 1;
+        let cleanUnitTitle = cand.title
+          .replace(/^(?:Unit|Module|Chapter|Part|Section)\s*\d+\s*[:\-\—\.\)]\s*/i, '')
+          .trim();
+
+        if (!cleanUnitTitle) {
+          cleanUnitTitle = `UNIT ${seqUnitNumber}`;
         }
-        currentUnit = { title: line.trim(), topics: [] };
-      } else if (currentUnit) {
-        if (!currentUnit.topics) currentUnit.topics = [];
-        currentUnit.topics.push(line.trim());
-      }
-    });
 
-    if (currentUnit && (currentUnit as { title?: string; topics?: string[] }).title) {
-      const validUnit = currentUnit as { title: string; topics?: string[] };
-      parsedUnits.push({
-        id: `unit-${Date.now()}-${unitCount}`,
-        unitNumber: ++unitCount,
-        title: validUnit.title,
-        topics: validUnit.topics && validUnit.topics.length > 0 ? validUnit.topics : ['General Syllabus Topics'],
-        coMapped: `CO${(unitCount % 5) + 1}`,
-        bloomLevel: 'APPLY',
-        hours: 10,
-        status: 'UPCOMING'
+        const formattedTitle = `Unit ${seqUnitNumber}: ${cleanUnitTitle}`;
+        const bloom = bloomLevels[Math.min(idx, bloomLevels.length - 1)];
+
+        return {
+          id: `unit-${Date.now()}-${seqUnitNumber}`,
+          unitNumber: seqUnitNumber,
+          title: formattedTitle,
+          topics: cand.topics.length > 0 ? cand.topics : ['Core Subject Topics'],
+          coMapped: `CO${seqUnitNumber}`,
+          bloomLevel: bloom,
+          hours: 10,
+          status: 'UPCOMING',
+        };
       });
+
+      saveUnits(parsedUnits);
+      closeAndResetImportModal();
+      toast.success(`⚡ Successfully structured and imported ${parsedUnits.length} syllabus units!`);
+      return;
     }
 
-    if (parsedUnits.length === 0) {
-      // Fallback single unit
-      parsedUnits.push({
-        id: `unit-${Date.now()}`,
-        unitNumber: syllabusUnits.length + 1,
-        title: 'Imported Unit 1',
-        topics: importText.split('\n').filter((l) => l.trim().length > 0),
+    // 2. Fallback if no unit headers found (e.g. user pasted raw list of topics without Unit headers)
+    const rawLines = importText.split(/\r?\n/);
+    const allTopics = rawLines
+      .map((l) => l.replace(/^[•\*\-\+\>\#\d\.\)\s]+/, '').replace(/[\*\_]/g, '').trim())
+      .filter((l) => l.length > 1 && !isActivityOrJunkLine(l) && !isImageDescriptionNoise(l));
+
+    const fallbackUnits: SyllabusUnit[] = [
+      {
+        id: `unit-${Date.now()}-1`,
+        unitNumber: 1,
+        title: 'Unit 1: Course Fundamentals & Overview',
+        topics: allTopics.length > 0 ? allTopics : ['Core Course Syllabus Concepts'],
         coMapped: 'CO1',
-        bloomLevel: 'APPLY',
+        bloomLevel: 'UNDERSTAND',
         hours: 10,
-        status: 'UPCOMING'
-      });
-    }
+        status: 'UPCOMING',
+      },
+    ];
 
-    saveUnits(parsedUnits);
-    setShowImportSyllabusModal(false);
-    setImportText('');
-    setUploadedFileName(null);
-    toast.success(`Successfully imported ${parsedUnits.length} syllabus units!`);
+    saveUnits(fallbackUnits);
+    closeAndResetImportModal();
+    toast.success('Successfully imported syllabus units!');
   };
 
   // Create New Course
@@ -1121,7 +1655,7 @@ export default function TeacherOBEPage() {
 
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setShowImportSyllabusModal(true)}
+                onClick={openImportSyllabusModal}
                 className="px-3.5 py-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-700 text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs"
               >
                 <FileUp className="size-4 text-orange-500" /> Import / Paste Syllabus
@@ -1151,7 +1685,7 @@ export default function TeacherOBEPage() {
               </div>
               <div className="flex items-center justify-center gap-3 pt-2">
                 <button
-                  onClick={() => setShowImportSyllabusModal(true)}
+                  onClick={openImportSyllabusModal}
                   className="px-4 py-2 rounded-xl border border-neutral-300 text-xs font-bold text-neutral-700 hover:bg-neutral-50 cursor-pointer"
                 >
                   Import Syllabus Text
@@ -1668,39 +2202,171 @@ export default function TeacherOBEPage() {
       {/* IMPORT / UPLOAD SYLLABUS MODAL */}
       {showImportSyllabusModal && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-neutral-200 p-6 max-w-xl w-full shadow-2xl space-y-4">
+          <div className="bg-white rounded-2xl border border-neutral-200 p-6 max-w-xl w-full shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
               <h3 className="text-base font-bold text-neutral-900 flex items-center gap-2">
                 <FileUp className="size-5 text-orange-500" />
                 Import & Extract Course Syllabus
               </h3>
-              <button onClick={() => setShowImportSyllabusModal(false)} className="text-neutral-400 hover:text-neutral-600 cursor-pointer">
+              <button
+                onClick={closeAndResetImportModal}
+                className="text-neutral-400 hover:text-neutral-600 cursor-pointer"
+              >
                 <X className="size-5" />
               </button>
             </div>
 
             <div className="space-y-4">
               {/* File Upload Zone */}
-              <div className="p-5 border-2 border-dashed border-neutral-200 hover:border-orange-500/50 rounded-2xl bg-neutral-50/60 text-center space-y-2 relative transition-all">
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setIsDragOver(true);
+                }}
+                onDragLeave={(e) => {
+                  e.preventDefault();
+                  setIsDragOver(false);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsDragOver(false);
+                  if (e.dataTransfer.files?.length) {
+                    processUploadedFiles(Array.from(e.dataTransfer.files));
+                  }
+                }}
+                className={cn(
+                  'p-5 border-2 border-dashed rounded-2xl text-center space-y-2 relative transition-all',
+                  isDragOver
+                    ? 'border-orange-500 bg-orange-50/70 scale-[1.01]'
+                    : 'border-neutral-200 hover:border-orange-500/50 bg-neutral-50/60'
+                )}
+              >
                 <input
                   type="file"
+                  multiple
                   onChange={handleFileUpload}
                   accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.doc,.docx,.md"
-                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full disabled:cursor-not-allowed"
+                  disabled={isExtractingFile}
                 />
-                <FileUp className="size-8 text-orange-500 mx-auto" />
+                <FileUp className={cn('size-8 mx-auto transition-colors', isDragOver ? 'text-orange-600 animate-bounce' : 'text-orange-500')} />
                 <div>
                   <p className="text-xs font-bold text-neutral-800">
-                    {uploadedFileName ? `Selected File: ${uploadedFileName}` : 'Upload PDF, Image, Word, or Document File'}
+                    {uploadedFilesList.length > 0
+                      ? `${uploadedFilesList.length} File${uploadedFilesList.length > 1 ? 's' : ''} Selected`
+                      : 'Upload Syllabus Files (Multi-File Supported)'}
                   </p>
                   <p className="text-[11px] text-neutral-500 mt-0.5">
-                    Drag and drop or click to upload (<span className="font-semibold text-neutral-700">PDF, PNG, JPG, DOCX, TXT, MD</span>)
+                    Drag and drop multiple files or click to upload (<span className="font-semibold text-neutral-700">PDF, PNG, JPG, DOCX, TXT, MD</span>)
                   </p>
                 </div>
                 <span className="inline-block px-3 py-1 bg-white border border-neutral-200 text-neutral-700 text-[11px] font-bold rounded-lg shadow-2xs">
-                  Browse Files
+                  Browse Files (Select Multiple)
                 </span>
               </div>
+
+              {/* Uploaded Files Status List */}
+              {uploadedFilesList.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-neutral-600">
+                    <span>Selected Files ({uploadedFilesList.length})</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUploadedFilesList([]);
+                        setImportText('');
+                      }}
+                      className="text-neutral-400 hover:text-red-500 cursor-pointer"
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                  <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                    {uploadedFilesList.map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex items-center justify-between p-2 rounded-xl border border-neutral-200 bg-neutral-50 text-xs"
+                      >
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <FileText className="size-4 text-orange-500 shrink-0" />
+                          <span className="font-medium text-neutral-800 truncate" title={item.name}>
+                            {item.name}
+                          </span>
+                          <span className="text-[10px] text-neutral-400 shrink-0">
+                            ({(item.size / 1024).toFixed(0)} KB)
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0 ml-2">
+                          {item.status === 'extracting' && (
+                            <span className="flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-blue-100 border border-blue-200 px-2 py-0.5 rounded-md">
+                              <Loader2 className="size-3 animate-spin text-blue-600" />
+                              Extracting...
+                            </span>
+                          )}
+                          {item.status === 'queued' && (
+                            <span
+                              className="flex items-center gap-1.5 text-[10px] font-bold text-amber-800 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-md"
+                              title="Extraction failed on previous attempt; moved to end of queue for retry"
+                            >
+                              <span className="size-2 rounded-full bg-amber-500 animate-pulse" />
+                              Queued
+                            </span>
+                          )}
+                          {item.status === 'success' && (
+                            <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-md">
+                              <Check className="size-3 text-emerald-600" />
+                              Completed
+                            </span>
+                          )}
+                          {item.status === 'failed' && (
+                            <span
+                              className="flex items-center gap-1 text-[10px] font-bold text-red-700 bg-red-100 border border-red-200 px-2 py-0.5 rounded-md"
+                              title={item.error || 'Extraction failed after retries'}
+                            >
+                              <X className="size-3 text-red-600" />
+                              Extraction Failed
+                            </span>
+                          )}
+                          {item.status === 'waiting' && (
+                            <span className="flex items-center gap-1 text-[10px] font-bold text-neutral-600 bg-neutral-100 border border-neutral-200 px-2 py-0.5 rounded-md">
+                              <Clock className="size-3 text-neutral-400" />
+                              Waiting
+                            </span>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveUploadedFile(item.id)}
+                            className="text-neutral-400 hover:text-red-500 p-0.5 cursor-pointer"
+                            title="Remove file"
+                          >
+                            <X className="size-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Extraction Progress Banner */}
+              {isExtractingFile && (
+                <div className="p-2.5 bg-orange-50 border border-orange-200 rounded-xl flex items-center justify-between text-xs text-orange-800">
+                  <span className="flex items-center gap-2 font-semibold">
+                    <Loader2 className="size-4 animate-spin text-orange-500" />
+                    Processing extraction queue...
+                  </span>
+                  <span className="text-[11px] font-bold text-orange-600">
+                    {uploadedFilesList.filter((f) => f.status === 'success').length} of {uploadedFilesList.length} complete
+                    {uploadedFilesList.filter((f) => f.status === 'queued').length > 0 && (
+                      <span className="ml-1 text-amber-700">
+                        ({uploadedFilesList.filter((f) => f.status === 'queued').length} queued for retry)
+                      </span>
+                    )}
+                  </span>
+                </div>
+              )}
 
               {/* Or Divider */}
               <div className="flex items-center gap-3 text-xs text-neutral-400 font-bold uppercase">
@@ -1711,31 +2377,51 @@ export default function TeacherOBEPage() {
 
               {/* Textarea */}
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-neutral-700">Extracted Syllabus Text / Paste Outline</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-neutral-700">Extracted Syllabus Text / Paste Outline</label>
+                  {importText.trim().length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setImportText('')}
+                      className="text-[10px] font-bold text-neutral-400 hover:text-red-500 cursor-pointer"
+                    >
+                      Clear Text
+                    </button>
+                  )}
+                </div>
                 <textarea
                   value={importText}
                   onChange={(e) => setImportText(e.target.value)}
-                  placeholder="Paste syllabus text here or view extracted text from uploaded file (e.g. Unit 1: Topic A, Topic B...)..."
-                  rows={6}
-                  className="w-full p-3 bg-neutral-50 border border-neutral-200 rounded-xl text-xs font-mono"
+                  placeholder="Paste syllabus text here or view extracted text from uploaded file(s) (e.g. Unit 1: Topic A, Topic B...)..."
+                  rows={7}
+                  className="w-full p-3 bg-neutral-50 border border-neutral-200 rounded-xl text-xs font-mono leading-relaxed"
                 />
-                <p className="text-[11px] text-neutral-400">VidyaAI will automatically extract and structure Units, Topics & Mapped COs.</p>
+                <p className="text-[11px] text-neutral-400">
+                  VidyaAI will automatically extract and structure Units, Topics & Mapped COs. You may review and edit the text above before parsing.
+                </p>
               </div>
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-neutral-100">
               <button
-                onClick={() => setShowImportSyllabusModal(false)}
-                className="px-4 py-2 rounded-xl border border-neutral-200 text-xs font-bold cursor-pointer"
+                onClick={closeAndResetImportModal}
+                className="px-4 py-2 rounded-xl border border-neutral-200 text-xs font-bold cursor-pointer hover:bg-neutral-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleImportSyllabus}
-                disabled={isExtractingFile}
-                className="px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold cursor-pointer shadow-xs"
+                disabled={isExtractingFile || !importText.trim()}
+                className="px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold cursor-pointer shadow-xs flex items-center gap-1.5"
               >
-                ⚡ AI Parse & Create Syllabus Units
+                {isExtractingFile ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin" />
+                    <span>Extracting...</span>
+                  </>
+                ) : (
+                  <span>⚡ AI Parse & Create Syllabus Units</span>
+                )}
               </button>
             </div>
           </div>

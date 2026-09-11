@@ -11,7 +11,7 @@ const router = Router();
 router.use(authenticate);
 
 
-router.post('/parse', uploadMiddleware.single('file'), asyncHandler(parseDocument));
+router.post('/parse', uploadMiddleware.any(), asyncHandler(parseDocument));
 router.post('/share', asyncHandler(shareQuiz));
 router.get('/shared/:id', asyncHandler(getSharedQuiz));
 

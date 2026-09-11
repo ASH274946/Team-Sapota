@@ -14,10 +14,12 @@ export class NvidiaProvider implements AIProvider {
   }
 
   async generate(prompt: string, options?: any, signal?: AbortSignal): Promise<any> {
-    const model = options?.model || 'meta/llama-3.1-70b-instruct';
+    const hasMedia = options?.media && options.media.length > 0;
+    const defaultModel = hasMedia ? 'meta/llama-3.2-11b-vision-instruct' : 'meta/llama-3.1-70b-instruct';
+    const model = options?.model || defaultModel;
     let messages: any[] = [{ role: 'user', content: prompt }];
     
-    if (options?.media && options.media.length > 0) {
+    if (hasMedia) {
       messages = [{
         role: 'user',
         content: [
@@ -62,7 +64,7 @@ export class NvidiaProvider implements AIProvider {
   }
 
   supportsVision(): boolean {
-    return false;
+    return true;
   }
 
   supportsJSON(): boolean {
