@@ -10,16 +10,20 @@ import { getPdfStorage } from './storage';
 // Question Paper PDF (existing — do NOT modify)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function generatePdf(paper: IGeneratedPaper): Promise<{ pdfPath: string; pdfUrl: string }> {
+export async function generatePdf(
+  paper: IGeneratedPaper,
+  type: 'paper' | 'key' | 'both' = 'both'
+): Promise<{ pdfPath: string; pdfUrl: string; pdfBuffer?: Buffer }> {
   validatePaperOrThrow(paper);
 
   // Dynamic import to avoid loading Puppeteer at startup
   const puppeteer = await import('puppeteer-core');
 
-  const html = buildPaperHtml(paper);
+  const html = buildPaperHtml(paper, type);
 
   const storage = getPdfStorage();
-  const fileName = `paper-${paper.assignmentId.toString()}-${Date.now()}.pdf`;
+  const suffix = type === 'both' ? '' : `-${type}`;
+  const fileName = `paper-${paper.assignmentId.toString()}-${Date.now()}${suffix}.pdf`;
 
   let browser;
   try {
@@ -37,7 +41,7 @@ export async function generatePdf(paper: IGeneratedPaper): Promise<{ pdfPath: st
 
     const pdfBuffer = await page.pdf({
       format: 'A4',
-      margin: { top: '22mm', right: '15mm', bottom: '18mm', left: '15mm' },
+      margin: { top: '20mm', right: '15mm', bottom: '20mm', left: '15mm' },
       printBackground: true,
       timeout: 60_000,
       displayHeaderFooter: true,
@@ -57,13 +61,13 @@ export async function generatePdf(paper: IGeneratedPaper): Promise<{ pdfPath: st
       ? pdfUrl
       : `${env.UPLOAD_DIR}/pdfs/${fileName}`;
     logger.info(`PDF generated: ${fileName}`);
-    return { pdfPath, pdfUrl };
+    return { pdfPath, pdfUrl, pdfBuffer };
   } finally {
     if (browser) await browser.close();
   }
 }
 
-function buildPaperHtml(paper: IGeneratedPaper): string {
+function buildPaperHtml(paper: IGeneratedPaper, type: 'paper' | 'key' | 'both'): string {
   const meta = paper.canonicalMetadata;
   const schoolName = meta?.schoolName?.trim() || 'School Examination';
   const examTitle = paper.title?.trim() || 'Question Paper';
@@ -71,32 +75,39 @@ function buildPaperHtml(paper: IGeneratedPaper): string {
   const className = meta?.className?.trim() || '';
   const duration = meta?.durationMinutes || paper.duration || 45;
   const maxMarks = meta?.generatedMarks || paper.totalMarks;
-  const sectionsHtml = paper.sections
-    .map(
-      (section: any, sIdx: number) => `
-      <section class="section">
-        <h2>${escapeHtml(section.title)}</h2>
-        ${section.instruction ? `<p class="instruction">${escapeHtml(section.instruction)}</p>` : ''}
-        <ol class="questions" start="${getStartNumber(paper, sIdx)}">
-          ${section.questions
-            .map(
-              (q: any) => `
-            <li class="question">
-              <div class="q-header">
-                <span class="q-text"><span class="difficulty">[${formatDifficulty(q.difficulty)}]</span> ${escapeHtml(q.question)}</span>
-                <span class="q-marks">[${formatMarks(q.marks)}]</span>
-              </div>
-              ${q.type === 'mcq' && q.options
-                ? `<ul class="options">${q.options.map((o: any) => `<li><strong>${escapeHtml(o.key)}.</strong> ${escapeHtml(o.text)}</li>`).join('')}</ul>`
-                : ''}`
-            )
-            .join('')}
-        </ol>
-      </section>`
-    )
-    .join('');
+  
+  let sectionsHtml = '';
+  if (type === 'paper' || type === 'both') {
+    sectionsHtml = paper.sections
+      .map(
+        (section: any, sIdx: number) => `
+        <section class="section">
+          <h2>${escapeHtml(section.title)}</h2>
+          ${section.instruction ? `<p class="instruction">${escapeHtml(section.instruction)}</p>` : ''}
+          <ol class="questions" start="${getStartNumber(paper, sIdx)}">
+            ${section.questions
+              .map(
+                (q: any) => `
+              <li class="question">
+                <div class="q-header">
+                  <span class="q-text"><span class="difficulty">[${formatDifficulty(q.difficulty)}]</span> ${escapeHtml(q.question)}</span>
+                  <span class="q-marks">[${formatMarks(q.marks)}]</span>
+                </div>
+                ${q.type === 'mcq' && q.options
+                  ? `<ul class="options">${q.options.map((o: any) => `<li><strong>${escapeHtml(o.key)}.</strong> ${escapeHtml(o.text)}</li>`).join('')}</ul>`
+                  : ''}`
+              )
+              .join('')}
+          </ol>
+        </section>`
+      )
+      .join('');
+  }
 
-  const answerHtml = buildAnswerKeyHtml(paper);
+  let answerHtml = '';
+  if (type === 'key' || type === 'both') {
+    answerHtml = buildAnswerKeyHtml(paper, type);
+  }
 
   return `<!DOCTYPE html>
 <html>
@@ -104,45 +115,44 @@ function buildPaperHtml(paper: IGeneratedPaper): string {
 <meta charset="utf-8">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Times New Roman', Times, serif; font-size: 12pt; color: #000; line-height: 1.5; }
-  .paper { width: 100%; padding: 0 2mm; }
-  .header { text-align: center; margin-bottom: 6mm; }
-  .school { font-size: 18pt; font-weight: 800; letter-spacing: 0.5px; }
-  .exam-title { font-size: 14pt; font-weight: 700; margin-top: 2mm; }
-  .class-line { font-size: 12pt; font-weight: 700; margin-top: 1mm; }
-  .meta-row { display: flex; justify-content: space-between; font-size: 11pt; font-weight: 700; border-bottom: 2px solid #000; padding-bottom: 3mm; margin: 4mm 0; }
-  .instruction-top { font-size: 11pt; font-weight: 700; margin-bottom: 4mm; }
-  .student-info { display: grid; grid-template-columns: 1.7fr 1fr 1.1fr; gap: 4mm; margin-bottom: 6mm; font-weight: 700; }
+  body { font-family: 'Times New Roman', Times, serif; font-size: 11pt; color: #000; line-height: 1.4; }
+  .paper { width: 100%; padding: 0; }
+  .header { text-align: center; margin-bottom: 4mm; }
+  .school { font-size: 16pt; font-weight: 800; letter-spacing: 0.5px; }
+  .exam-title { font-size: 13pt; font-weight: 700; margin-top: 1mm; }
+  .class-line { font-size: 11pt; font-weight: 700; margin-top: 1mm; }
+  .meta-row { display: flex; justify-content: space-between; font-size: 11pt; font-weight: 700; border-bottom: 2px solid #000; padding-bottom: 2mm; margin: 3mm 0; }
+  .instruction-top { font-size: 11pt; font-weight: 700; margin-bottom: 3mm; }
+  .student-info { display: grid; grid-template-columns: 1.7fr 1fr 1.1fr; gap: 4mm; margin-bottom: 4mm; font-weight: 700; }
   .line { display: inline-block; min-width: 30mm; border-bottom: 1px solid #000; height: 12px; vertical-align: baseline; }
-  .section { margin-top: 6mm; }
-  .section h2 { text-align: center; font-size: 14pt; margin-bottom: 4mm; font-weight: 800; }
-  .instruction { font-size: 11pt; font-style: italic; margin-bottom: 3mm; }
-  .questions { padding-left: 8mm; margin: 0; }
-  .question { margin-bottom: 3mm; padding-left: 2mm; }
+  .section { margin-top: 5mm; }
+  .section h2 { text-align: center; font-size: 13pt; margin-bottom: 3mm; font-weight: 800; }
+  .instruction { font-size: 11pt; font-style: italic; margin-bottom: 2mm; }
+  .questions { padding-left: 6mm; margin: 0; }
+  .question { margin-bottom: 3mm; padding-left: 1mm; page-break-inside: avoid; break-inside: avoid; }
   .q-header { display: flex; align-items: flex-start; gap: 3mm; }
   .q-text { flex: 1; }
-  .difficulty { font-weight: 400; color: #555; font-size: 10pt; }
-  .q-marks { font-weight: 400; white-space: nowrap; font-size: 11pt; }
-  .options { list-style: none; padding-left: 6mm; margin: 2mm 0 0; }
-  .options li { margin-bottom: 1mm; }
-  .end-note { font-weight: 800; text-align: center; border-top: 2px solid #000; padding-top: 3mm; margin-top: 6mm; }
-  .answer-key { margin-top: 8mm; padding-top: 4mm; border-top: 2px solid #000; }
-  .answer-key h2 { font-size: 14pt; margin-bottom: 3mm; }
-  .answer-key ol { margin: 0; padding-left: 8mm; }
-  .answer-key li { margin-bottom: 2mm; }
-  .answer-key { page-break-before: always; break-before: page; }
-  .section { page-break-inside: avoid; break-inside: avoid-page; }
-  .question { page-break-inside: avoid; break-inside: avoid-page; }
-  @page { size: A4; margin: 18mm 16mm 22mm; }
+  .difficulty { font-weight: 400; color: #555; font-size: 9.5pt; }
+  .q-marks { font-weight: 400; white-space: nowrap; font-size: 10.5pt; }
+  .options { list-style: none; padding-left: 5mm; margin: 1mm 0 0; }
+  .options li { margin-bottom: 0.5mm; }
+  .end-note { font-weight: 800; text-align: center; border-top: 2px solid #000; padding-top: 2mm; margin-top: 5mm; }
+  .answer-key { margin-top: 5mm; padding-top: 3mm; border-top: 2px solid #000; }
+  .answer-key h2 { font-size: 14pt; margin-bottom: 3mm; text-align: center; font-weight: 800; }
+  .answer-key ol { margin: 0; padding-left: 6mm; }
+  .answer-key li { margin-bottom: 2.5mm; page-break-inside: avoid; break-inside: avoid; }
+  .answer-key-standalone { margin-top: 0; padding-top: 0; border-top: none; }
+  ${type === 'both' ? '.answer-key { page-break-before: always; break-before: page; }' : ''}
 </style>
 </head>
 <body>
   <main class="paper">
     <div class="header">
       <div class="school">${escapeHtml(schoolName)}</div>
-      <div class="exam-title">${escapeHtml(examTitle)}</div>
+      <div class="exam-title">${escapeHtml(examTitle)}${type === 'key' ? ' - Answer Key' : ''}</div>
       <div class="class-line">Subject: ${escapeHtml(subject)}${className ? ` &nbsp;|&nbsp; Class: ${escapeHtml(className)}` : ''}</div>
     </div>
+    ${type === 'paper' || type === 'both' ? `
     <div class="meta-row">
       <span>Time Allowed: ${duration} minutes</span>
       <span>Maximum Marks: ${maxMarks}</span>
@@ -153,8 +163,9 @@ function buildPaperHtml(paper: IGeneratedPaper): string {
       <div>Roll Number: <span class="line"></span></div>
       <div>Section: <span class="line"></span></div>
     </div>
+    ` : ''}
     ${sectionsHtml}
-    <p class="end-note">End of Question Paper</p>
+    ${type === 'paper' || type === 'both' ? '<p class="end-note">End of Question Paper</p>' : ''}
     ${answerHtml}
   </main>
 </body>
@@ -188,20 +199,28 @@ function formatDifficulty(value: string): string {
   return 'Easy';
 }
 
-function buildAnswerKeyHtml(paper: IGeneratedPaper): string {
+function buildAnswerKeyHtml(paper: IGeneratedPaper, type: 'paper' | 'key' | 'both'): string {
   const answers = paper.sections
     .flatMap((section: any) => section.questions)
-    .map((question: any, index: number) => ({ number: index + 1, answer: question.answer }))
+    .map((question: any, index: number) => ({ number: index + 1, question: question.question, answer: question.answer }))
     .filter((item: any) => item.answer?.text);
 
   if (answers.length === 0) return '';
 
+  const classList = type === 'key' ? 'answer-key answer-key-standalone' : 'answer-key';
+
   return `
-    <section class="answer-key">
+    <section class="${classList}">
       <h2>Answer Key</h2>
       <ol>
         ${answers
-          .map(({ answer }: any) => `<li>${escapeHtml(answer?.text)}${answer?.explanation ? `<br><span>${escapeHtml(answer.explanation)}</span>` : ''}</li>`)
+          .map(({ question, answer }: any) => `
+            <li>
+              <strong>Q: ${escapeHtml(question)}</strong><br>
+              <strong>A:</strong> ${escapeHtml(answer?.text)}
+              ${answer?.explanation ? `<br><span style="font-style: italic; color: #555;">Explanation: ${escapeHtml(answer.explanation)}</span>` : ''}
+            </li>
+          `)
           .join('')}
       </ol>
     </section>`;

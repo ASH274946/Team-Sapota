@@ -194,18 +194,19 @@ export default function PaperViewPage({ params }: { params: Promise<{ id: string
     }
   };
 
-  const handleDownload = async () => {
+  const handleDownload = async (type: 'paper' | 'key' | 'both') => {
     setDownloading(true);
     try {
       // 1. Attempt authenticated download directly from backend
       try {
-        const res = await apiClient.get(`/papers/${id}/pdf`, { responseType: 'blob' });
+        const res = await apiClient.get(`/papers/${id}/pdf?type=${type}`, { responseType: 'blob' });
         if (res.data) {
           const blob = new Blob([res.data], { type: 'application/pdf' });
           const url = URL.createObjectURL(blob);
           const link = document.createElement('a');
           link.href = url;
-          link.download = `${(paper?.title || 'question_paper').replace(/\s+/g, '_')}.pdf`;
+          const suffix = type === 'both' ? '' : `_${type}`;
+          link.download = `${(paper?.title || 'question_paper').replace(/\s+/g, '_')}${suffix}.pdf`;
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
@@ -217,8 +218,8 @@ export default function PaperViewPage({ params }: { params: Promise<{ id: string
         console.warn('API PDF stream failed, trying asset URL...', apiErr);
       }
 
-      // 2. If paper has pdfUrl, try direct link
-      if (paper?.pdfUrl) {
+      // 2. If paper has pdfUrl, try direct link (only applies if we want full paper and it's generated)
+      if (type === 'both' && paper?.pdfUrl) {
         const link = document.createElement('a');
         link.href = resolveAssetUrl(paper.pdfUrl);
         link.download = `${(paper.title || 'question_paper').replace(/\s+/g, '_')}.pdf`;
@@ -308,13 +309,22 @@ export default function PaperViewPage({ params }: { params: Promise<{ id: string
                 </button>
               )}
               <button
-                onClick={handleDownload}
+                onClick={() => handleDownload('paper')}
                 disabled={downloading}
                 className="btn btn-pill"
                 style={{ background: '#FFFFFF', color: '#111827', display: 'inline-flex', alignItems: 'center', gap: 6 }}
               >
                 {downloading ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
-                Download PDF
+                Paper PDF
+              </button>
+              <button
+                onClick={() => handleDownload('key')}
+                disabled={downloading}
+                className="btn btn-pill"
+                style={{ background: '#F3F4F6', color: '#111827', border: '1px solid #E5E7EB', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              >
+                {downloading ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+                Answer Key
               </button>
             </div>
           )}
