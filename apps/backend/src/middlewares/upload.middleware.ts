@@ -19,16 +19,23 @@ const storage = multer.diskStorage({
   },
 });
 
+const ALLOWED_EXTENSIONS = ['.pdf', '.txt', '.md', '.docx', '.doc', '.png', '.jpg', '.jpeg', '.webp'];
+
 const ALLOWED_TYPES: Record<string, string[]> = {
-  '.pdf': ['application/pdf'],
-  '.txt': ['text/plain'],
+  '.pdf': ['application/pdf', 'application/x-pdf', 'application/octet-stream'],
+  '.txt': ['text/plain', 'text/x-plain', 'application/octet-stream'],
+  '.md': ['text/markdown', 'text/x-markdown', 'text/plain', 'application/octet-stream'],
   '.docx': [
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/zip', // DOCX files are ZIP archives; some browsers/OSes report this MIME
+    'application/zip',
+    'application/x-zip-compressed',
+    'application/octet-stream',
   ],
-  '.png': ['image/png'],
-  '.jpg': ['image/jpeg'],
-  '.jpeg': ['image/jpeg'],
+  '.doc': ['application/msword', 'application/octet-stream'],
+  '.png': ['image/png', 'image/x-png', 'application/octet-stream'],
+  '.jpg': ['image/jpeg', 'image/pjpeg', 'application/octet-stream'],
+  '.jpeg': ['image/jpeg', 'image/pjpeg', 'application/octet-stream'],
+  '.webp': ['image/webp', 'application/octet-stream'],
 };
 
 function fileFilter(
@@ -38,7 +45,22 @@ function fileFilter(
 ): void {
   const fileExt = path.extname(file.originalname).toLowerCase();
   const mime = (file.mimetype || '').toLowerCase();
-  const allowed = ALLOWED_TYPES[fileExt]?.includes(mime) ?? false;
+
+  // Validate extension is known
+  if (!ALLOWED_EXTENSIONS.includes(fileExt)) {
+    logger.warn({
+      userId: req.user?.id || 'anonymous',
+      fileName: file.originalname,
+      mime,
+      ext: fileExt,
+    }, '[Upload] Rejected file — extension not allowed');
+    cb(new Error(`File type not allowed. Supported extensions: ${ALLOWED_EXTENSIONS.join(', ')}`));
+    return;
+  }
+
+  const allowedMimes = ALLOWED_TYPES[fileExt];
+  // Allow if mime matches known list or if mime is generic/empty but extension is verified
+  const allowed = !allowedMimes || allowedMimes.length === 0 || allowedMimes.includes(mime) || !mime;
 
   if (allowed) {
     cb(null, true);
@@ -48,8 +70,8 @@ function fileFilter(
       fileName: file.originalname,
       mime,
       ext: fileExt,
-    }, '[Upload] Rejected file — type not allowed');
-    cb(new Error('File type not allowed. Only PDF, DOCX, and TXT files are accepted.'));
+    }, '[Upload] Rejected file — mime mismatch');
+    cb(new Error(`File type not allowed. Mime ${mime} does not match extension ${fileExt}`));
   }
 }
 

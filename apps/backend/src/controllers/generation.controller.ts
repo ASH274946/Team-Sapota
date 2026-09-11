@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import pdfParse from 'pdf-parse';
 import { StreakService } from '../services/streak.service';
+import { processUploadedFiles } from '../services/document-extractor.service';
 
 
 export const generateQuestion = async (req: Request, res: Response): Promise<void> => {
@@ -357,40 +358,38 @@ export const clearQuizHistory = async (req: Request, res: Response): Promise<voi
 
 /**
  * POST /api/v1/generate/parse
- * Extract text from an uploaded document (PDF or TXT)
+ * Extract text from uploaded document(s) (PDF, PNG, JPG, JPEG, WEBP, DOCX, TXT, MD)
  */
 export const parseDocument = async (req: Request, res: Response): Promise<void> => {
   try {
-    if (!req.file) {
-      res.status(400).json({ success: false, error: 'No file uploaded' });
+    // Handle both req.file (single file) and req.files (array or object map of files)
+    let files: Express.Multer.File[] = [];
+
+    if (req.file) {
+      files = [req.file];
+    } else if (Array.isArray(req.files)) {
+      files = req.files;
+    } else if (req.files && typeof req.files === 'object') {
+      files = Object.values(req.files).flat();
+    }
+
+    if (!files || files.length === 0) {
+      res.status(400).json({ success: false, error: 'No files uploaded. Please select one or more files.' });
       return;
     }
 
-    let extractedText = '';
-    const filePath = req.file.path;
-    const mimeType = req.file.mimetype;
+    const { content, results } = await processUploadedFiles(files);
 
-    if (mimeType === 'application/pdf') {
-      const dataBuffer = fs.readFileSync(filePath);
-      const data = await pdfParse(dataBuffer);
-      extractedText = data.text;
-    } else if (mimeType === 'text/plain') {
-      extractedText = fs.readFileSync(filePath, 'utf-8');
-    } else {
-      res.status(400).json({ success: false, error: 'Unsupported file type. Please upload a PDF or TXT file.' });
-      return;
-    }
-
-    // Clean up uploaded file
-    try { fs.unlinkSync(filePath); } catch { /* non-fatal */ }
-
-    // Clean up text slightly to avoid massive token bloat
-    const cleanText = extractedText.replace(/\s+/g, ' ').trim().slice(0, 30000); // limit to ~30k chars to avoid token limits
-
-    res.json({ success: true, data: { content: cleanText } });
-  } catch (error) {
+    res.json({
+      success: true,
+      data: {
+        content,
+        results,
+      },
+    });
+  } catch (error: any) {
     logger.error(`[parseDocument] ${error instanceof Error ? error.message : error}`);
-    res.status(500).json({ success: false, error: 'Failed to parse document' });
+    res.status(500).json({ success: false, error: error.message || 'Failed to parse document' });
   }
 };
 
