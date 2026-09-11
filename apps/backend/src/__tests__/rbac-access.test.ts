@@ -85,6 +85,7 @@ describe('RBAC — role permissions', () => {
     expect(hasPermission('STUDENT', PERMISSIONS.VIEW_RESULTS)).toBe(true);
     expect(hasPermission('STUDENT', PERMISSIONS.VIEW_ASSIGNMENT)).toBe(true);
     expect(hasPermission('STUDENT', PERMISSIONS.CREATE_ASSIGNMENT)).toBe(false);
+
     expect(hasPermission('STUDENT', PERMISSIONS.GRADE_ASSESSMENT)).toBe(false);
   });
 

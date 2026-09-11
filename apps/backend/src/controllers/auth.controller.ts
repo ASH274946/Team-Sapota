@@ -1036,10 +1036,26 @@ export const updateOrganization = async (req: Request, res: Response): Promise<v
       });
     }
 
+    const updatedUser = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    let accessToken = null;
+    if (updatedUser) {
+      accessToken = generateAccessToken({
+        userId: updatedUser.id,
+        email: updatedUser.email,
+        role: updatedUser.role,
+        organizationId: updatedUser.organizationId,
+        activeOrganizationId: updatedUser.activeOrganizationId,
+        departmentId: updatedUser.departmentId,
+      });
+    }
+
     res.json({
       success: true,
       message: 'Organization settings updated',
-      data: { organizationName, department, academicYear },
+      data: { organizationName, department, academicYear, accessToken },
     });
   } catch (error) {
     logger.error(`[updateOrganization] ${error}`);
@@ -1075,12 +1091,20 @@ export const ssoLogin = async (req: Request, res: Response): Promise<void> => {
         res.status(403).json({ success: false, error: 'Account disabled' });
         return;
       }
+      
+      // Allow role sync from toggle if user hasn't completed onboarding yet
+      if (!user.hasCompletedOnboarding && role && user.role !== role) {
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: { role: role as any },
+        });
+      }
     } else {
       if (!isSignUp) {
         res.status(404).json({ success: false, error: 'Account not found. Please sign up first.', code: 'ACCOUNT_NOT_FOUND' });
         return;
       }
-      // If user does not exist, create a new one (SSO auto-onboarding)
+      // If user does not exist, create a new one
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const crypto = require('crypto');
       const randomPassword = crypto.randomBytes(16).toString('hex');
@@ -1092,7 +1116,7 @@ export const ssoLogin = async (req: Request, res: Response): Promise<void> => {
           firstName: firstName || 'SSO',
           lastName: lastName || 'User',
           role: role as any,
-          hasCompletedOnboarding: true,
+          hasCompletedOnboarding: false,
         },
       });
     }

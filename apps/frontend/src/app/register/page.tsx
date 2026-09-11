@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { motion, type Variants } from 'motion/react';
+import { motion, type Variants } from 'framer-motion';
 import { useAuthStore } from '@/store/auth.store';
 import toast from 'react-hot-toast';
 import { Eye, EyeOff, MailCheck } from 'lucide-react';

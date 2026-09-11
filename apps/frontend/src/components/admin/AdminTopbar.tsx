@@ -27,9 +27,9 @@ export function AdminTopbar() {
     if (success) {
       const state = useAuthStore.getState();
       if (state.user?.role === 'SUPER_ADMIN') {
-        router.push('/super-admin');
+        window.location.assign('/super-admin');
       } else {
-        router.push('/dashboard');
+        window.location.assign('/dashboard');
       }
     }
   };

@@ -216,7 +216,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         if (error.status === 500 || error.message?.includes('500') || error.message?.includes('magic link')) {
           return {
             success: false,
-            error: 'Custom SMTP Error: Brevo credentials in Supabase Dashboard need verification. Please check Host (smtp-relay.brevo.com), Port (587), and Brevo SMTP Key.',
+            error: 'Custom SMTP Error: Your SMTP credentials in the Supabase Dashboard are invalid or failing. Please verify your SMTP Host, Port, Username, and App Password.',
           };
         }
         return { success: false, error: error.message };
@@ -252,6 +252,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
             provider: 'supabase_otp',
             token: data.session.access_token,
             role: role || 'STUDENT',
+            isSignUp: true,
           });
         } catch {
           const userObj: User = {
@@ -427,11 +428,15 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         lastName: data.lastName,
       });
 
-      await api.put('/auth/me/organization', {
+      const orgRes = await api.put('/auth/me/organization', {
         organizationName: data.organizationName,
         department: data.department,
         academicYear: '2026-2027',
       });
+
+      if (orgRes.data?.data?.accessToken) {
+        setApiToken(orgRes.data.data.accessToken);
+      }
 
       const groupRes = await api.post('/groups', {
         name: data.className,

@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { motion, type Variants } from 'motion/react';
+import { motion, type Variants } from 'framer-motion';
 
 // Simple Google SVG Icon
 export const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
