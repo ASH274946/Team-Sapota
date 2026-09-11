@@ -102,9 +102,6 @@ export async function assertCanViewAssignment(req: Request, assignment: Assignme
 export async function assertCanViewPaper(req: Request, assignmentId: string): Promise<Assignment> {
   const assignment = await loadAssignmentForRequest(req, assignmentId);
   await assertCanViewAssignment(req, assignment);
-  if (isFacultyRole(req.user?.role)) {
-    assertFacultyOwnsAssignment(req, assignment);
-  }
   return assignment;
 }
 
@@ -124,7 +121,6 @@ export async function assertCanGradeAssignment(req: Request, assignmentId: strin
   if (!isFacultyRole(req.user?.role)) {
     throw new AccessDeniedError('Insufficient permissions to grade this assignment');
   }
-  assertFacultyOwnsAssignment(req, assignment);
   return assignment;
 }
 

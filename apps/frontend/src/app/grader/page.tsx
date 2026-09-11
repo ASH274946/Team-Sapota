@@ -12,6 +12,9 @@ import {
 import toast from 'react-hot-toast';
 import { apiClient } from '@/services/api.client';
 import Link from 'next/link';
+import { AssessmentUploadView } from '@/components/grader/AssessmentUploadView';
+import { fetchPaper } from '@/services/paper.service';
+import type { GeneratedPaper } from '@/types/paper.types';
 
 interface Rubric {
   id: string;
@@ -39,6 +42,13 @@ interface Submission {
   evaluations?: Array<{ score: number }>;
 }
 
+interface GradingConfig {
+  rubricId?: string | null;
+  answerKeyText?: string;
+  questionPaperName?: string | null;
+  autoEvaluate?: boolean;
+}
+
 export default function GraderDashboard() {
   const [activeTab, setActiveTab] = useState<'assignments' | 'rubrics'>('assignments');
   const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -47,8 +57,13 @@ export default function GraderDashboard() {
 
   // Grading config modal states
   const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
+  const [showUploadWorkspace, setShowUploadWorkspace] = useState(false);
+  const [generatedPaper, setGeneratedPaper] = useState<GeneratedPaper | null>(null);
+  const [paperLoading, setPaperLoading] = useState(false);
   const [rubricId, setRubricId] = useState('');
   const [answerKey, setAnswerKey] = useState('');
+  const [questionPaperName, setQuestionPaperName] = useState<string | null>(null);
+  const [autoEvaluate, setAutoEvaluate] = useState(true);
   const [savingConfig, setSavingConfig] = useState(false);
 
   // Submissions states
@@ -98,19 +113,32 @@ export default function GraderDashboard() {
 
   const handleOpenConfig = async (assignment: Assignment) => {
     setSelectedAssignment(assignment);
+    setShowUploadWorkspace(true);
+    setGeneratedPaper(null);
+    setPaperLoading(true);
     loadSubmissions(assignment.id);
+    fetchPaper(assignment.id)
+      .then((paper) => setGeneratedPaper(paper))
+      .catch(() => setGeneratedPaper(null))
+      .finally(() => setPaperLoading(false));
     try {
-      const res = await apiClient.get<{ success: boolean; data: any }>(`/grader/assignments/${assignment.id}/config`);
+      const res = await apiClient.get<{ success: boolean; data: GradingConfig | null }>(`/grader/assignments/${assignment.id}/config`);
       if (res.data.data) {
         setRubricId(res.data.data.rubricId || '');
         setAnswerKey(res.data.data.answerKeyText || '');
+        setQuestionPaperName(res.data.data.questionPaperName || null);
+        setAutoEvaluate(res.data.data.autoEvaluate !== false);
       } else {
         setRubricId('');
         setAnswerKey('');
+        setQuestionPaperName(null);
+        setAutoEvaluate(true);
       }
     } catch {
       setRubricId('');
       setAnswerKey('');
+      setQuestionPaperName(null);
+      setAutoEvaluate(true);
     }
   };
 
@@ -121,12 +149,59 @@ export default function GraderDashboard() {
       await apiClient.post(`/grader/assignments/${selectedAssignment.id}/config`, {
         rubricId: rubricId || null,
         answerKeyText: answerKey,
+        autoEvaluate,
       });
       toast.success('Grading configuration saved successfully');
     } catch {
       toast.error('Failed to save grading configuration');
     } finally {
       setSavingConfig(false);
+    }
+  };
+
+  const handleEvaluateSelected = async (submissionIds: string[]) => {
+    if (!selectedAssignment || submissionIds.length === 0) return;
+    try {
+      for (const submissionId of submissionIds) {
+        await apiClient.post(`/grader/submissions/${submissionId}/evaluate`);
+      }
+      toast.success(`${submissionIds.length} student${submissionIds.length === 1 ? '' : 's'} evaluated successfully`);
+      await loadSubmissions(selectedAssignment.id);
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'One or more evaluations failed');
+    }
+  };
+
+  const handleStartMapping = async (submissionIds: string[]) => {
+    if (!selectedAssignment) return;
+    // Ensure the assignment has an active grading config, while the generated paper
+    // remains the source of truth for the question context.
+    await apiClient.post(`/grader/assignments/${selectedAssignment.id}/config`, {
+      rubricId: rubricId || null,
+      answerKeyText: answerKey,
+      autoEvaluate: true,
+    });
+    await handleEvaluateSelected(submissionIds);
+    setShowUploadWorkspace(false);
+  };
+
+  const handleQuestionPaperUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!selectedAssignment || !file) return;
+    const formData = new FormData();
+    formData.append('questionPaper', file);
+    setSavingConfig(true);
+    try {
+      await apiClient.post(`/grader/assignments/${selectedAssignment.id}/question-paper`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setQuestionPaperName(file.name);
+      toast.success('Question paper uploaded and mapped to this evaluation');
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to upload question paper');
+    } finally {
+      setSavingConfig(false);
+      event.target.value = '';
     }
   };
 
@@ -173,21 +248,25 @@ export default function GraderDashboard() {
 
   const handleUploadSubmission = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!selectedAssignment || !e.target.files || e.target.files.length === 0) return;
-    const file = e.target.files[0];
+    const files = Array.from(e.target.files);
     const formData = new FormData();
-    formData.append('files', file);
+    files.forEach((file) => formData.append('files', file));
 
     setUploading(true);
     try {
-      await apiClient.post(`/grader/assignments/${selectedAssignment.id}/submissions`, formData, {
+      const response = await apiClient.post<{ success: boolean; data: Array<{ evaluated: boolean; error?: string; pendingReason?: string }> }>(`/grader/assignments/${selectedAssignment.id}/submissions`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      toast.success('Submission uploaded successfully');
+      const evaluated = response.data.data.filter((item) => item.evaluated).length;
+      const failed = response.data.data.filter((item) => item.error).length;
+      toast.success(evaluated ? `${evaluated} answer sheet${evaluated === 1 ? '' : 's'} uploaded and evaluated` : `${files.length} answer sheet${files.length === 1 ? '' : 's'} uploaded`);
+      if (failed) toast.error(`${failed} sheet${failed === 1 ? '' : 's'} could not be evaluated; use Regrade after checking the configuration.`);
       loadSubmissions(selectedAssignment.id);
     } catch {
       toast.error('Failed to upload submission');
     } finally {
       setUploading(false);
+      e.target.value = '';
     }
   };
 
@@ -213,17 +292,18 @@ export default function GraderDashboard() {
   }
 
   return (
-    <div className="dashboard-view" style={{ padding: 'var(--page-pad)', maxWidth: 'var(--page-max-w)', margin: '0 auto' }}>
-      <div className="desktop-page-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <ClipboardCheck size={24} color="var(--brand)" />
-          <h1 className="page-title">AI Assignment Grader</h1>
+    <div className="dashboard-view" style={{ width: '100%', maxWidth: 'var(--page-max-w)', margin: '0 auto' }}>
+      {!selectedAssignment && <>
+        <div className="desktop-page-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <ClipboardCheck size={24} color="var(--brand)" />
+            <h1 className="page-title">AI Assignment Grader</h1>
+          </div>
+          <p className="page-subtitle">Configure assessment rubrics, evaluate student answers via AI, and review grades.</p>
         </div>
-        <p className="page-subtitle">Configure assessment rubrics, evaluate student answers via AI, and review grades.</p>
-      </div>
 
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: 24, borderBottom: '1px solid var(--border)', marginBottom: 24 }}>
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: 24, borderBottom: '1px solid var(--border)', marginBottom: 24 }}>
         <button
           onClick={() => setActiveTab('assignments')}
           style={{
@@ -246,14 +326,26 @@ export default function GraderDashboard() {
         >
           Rubrics & Criteria
         </button>
-      </div>
+        </div>
+      </>}
 
       <AnimatePresence mode="wait">
         {activeTab === 'assignments' ? (
           <motion.div key="assignments" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             {selectedAssignment ? (
               // Active Grading Config and Submissions View
-              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.8fr', gap: 24 }}>
+              showUploadWorkspace ? (
+                <AssessmentUploadView
+                  assignmentTitle={selectedAssignment.title}
+                  onBack={() => setSelectedAssignment(null)}
+                  questionPaper={generatedPaper}
+                  questionPaperLoading={paperLoading}
+                  attemptedStudents={submissions}
+                  submissionsLoading={submissionsLoading}
+                  onStartMapping={handleStartMapping}
+                  onEvaluateSelected={handleEvaluateSelected}
+                />
+              ) : <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.8fr', gap: 24 }}>
                 {/* Configuration Panel */}
                 <div className="card" style={{ padding: 24, alignSelf: 'start' }}>
                   <button className="btn btn-secondary btn-sm" style={{ marginBottom: 16 }} onClick={() => setSelectedAssignment(null)}>
@@ -267,6 +359,16 @@ export default function GraderDashboard() {
                       {rubrics.map((r) => <option key={r.id} value={r.id}>{r.title}</option>)}
                     </NativeSelect>
                   </div>
+                  <div className="input-group" style={{ marginBottom: 16 }}>
+                    <label className="label">Question Paper</label>
+                    <label className="btn btn-secondary btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                      <Upload size={14} /> {savingConfig ? 'Uploading...' : questionPaperName ? 'Replace Question Paper' : 'Upload Question Paper'}
+                      <input type="file" onChange={handleQuestionPaperUpload} style={{ display: 'none' }} disabled={savingConfig} accept=".pdf,.docx,.txt,.png,.jpg,.jpeg" />
+                    </label>
+                    <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
+                      {questionPaperName ? `Mapped: ${questionPaperName}` : 'Upload the source paper so AI can match questions to each answer sheet.'}
+                    </p>
+                  </div>
                   <div className="input-group" style={{ marginBottom: 20 }}>
                     <label className="label">Reference Answer Key</label>
                     <textarea
@@ -277,6 +379,10 @@ export default function GraderDashboard() {
                       onChange={(e) => setAnswerKey(e.target.value)}
                     />
                   </div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 16, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={autoEvaluate} onChange={(e) => setAutoEvaluate(e.target.checked)} />
+                    Automatically evaluate answer sheets after upload
+                  </label>
                   <button className="btn btn-primary" onClick={handleSaveConfig} disabled={savingConfig} style={{ width: '100%' }}>
                     {savingConfig ? 'Saving...' : 'Save Configuration'}
                   </button>
@@ -287,8 +393,8 @@ export default function GraderDashboard() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
                     <h3 style={{ fontSize: 16, fontWeight: 700 }}>Student Submissions</h3>
                     <label className="btn btn-dark btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-                      <Upload size={14} /> {uploading ? 'Uploading...' : 'Upload Submission'}
-                      <input type="file" onChange={handleUploadSubmission} style={{ display: 'none' }} disabled={uploading} accept=".pdf,.txt" />
+                      <Upload size={14} /> {uploading ? 'Uploading...' : 'Upload Answer Sheets'}
+                      <input type="file" multiple onChange={handleUploadSubmission} style={{ display: 'none' }} disabled={uploading} accept=".pdf,.docx,.txt,.png,.jpg,.jpeg" />
                     </label>
                   </div>
 

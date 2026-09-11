@@ -183,3 +183,111 @@ export const analyzeOBE = async (req: Request, res: Response): Promise<void> => 
   sendSuccess(res, { report: mockReport }, { message: 'OBE Analysis Complete' });
 };
 
+/**
+ * POST /v1/copilot/test-paper
+ * Generates an end-to-end examination paper with answer key and marking scheme.
+ */
+export const generateTestPaper = async (req: Request, res: Response): Promise<void> => {
+  const { subject, topic, grade, duration, totalMarks, difficulty, customInstructions } = req.body;
+  const userId = req.user?.id ?? 'demo-faculty-id';
+  const organizationId = req.user?.activeOrganizationId ?? req.user?.organizationId ?? '';
+
+  if (!subject || !topic) {
+    sendError(res, 400, 'subject and topic are required', { errorCode: 'VALIDATION_ERROR' });
+    return;
+  }
+
+  const paper = await TeacherCopilotService.generateTestPaper(userId, organizationId, {
+    subject,
+    topic,
+    grade,
+    duration,
+    totalMarks,
+    difficulty,
+    customInstructions
+  });
+
+  sendSuccess(res, paper, { message: 'Examination test paper generated successfully' }, 201);
+};
+
+/**
+ * GET /v1/copilot/test-papers
+ * Retrieves all generated test papers.
+ */
+export const getTestPapers = async (req: Request, res: Response): Promise<void> => {
+  const organizationId = req.user?.activeOrganizationId ?? req.user?.organizationId ?? '';
+
+  const where: any = {};
+  if (organizationId) {
+    where.organizationId = organizationId;
+  }
+
+  const papers = await prisma.generatedPaper.findMany({
+    where,
+    include: {
+      assignment: {
+        select: {
+          id: true,
+          title: true,
+          subject: true,
+          duration: true,
+          totalMarks: true,
+          status: true,
+          createdById: true
+        }
+      }
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 50
+  });
+
+  sendSuccess(res, papers, { message: 'Test papers retrieved' });
+};
+
+/**
+ * GET /v1/copilot/test-paper/:id
+ * Retrieves a single test paper with full section and question details.
+ */
+export const getTestPaperById = async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params;
+
+  const paper = await prisma.generatedPaper.findUnique({
+    where: { id },
+    include: {
+      assignment: true
+    }
+  });
+
+  if (!paper) {
+    sendError(res, 404, 'Test paper not found', { errorCode: 'NOT_FOUND' });
+    return;
+  }
+
+  sendSuccess(res, paper, { message: 'Test paper retrieved' });
+};
+
+/**
+ * DELETE /v1/copilot/test-paper/:id
+ * Deletes a test paper.
+ */
+export const deleteTestPaper = async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params;
+
+  const paper = await prisma.generatedPaper.findUnique({ where: { id } });
+  if (!paper) {
+    sendError(res, 404, 'Test paper not found', { errorCode: 'NOT_FOUND' });
+    return;
+  }
+
+  await prisma.generatedPaper.delete({ where: { id } });
+  if (paper.assignmentId) {
+    try {
+      await prisma.assignment.delete({ where: { id: paper.assignmentId } });
+    } catch {
+      // ignore if cascade already deleted
+    }
+  }
+
+  sendSuccess(res, { deleted: true }, { message: 'Test paper deleted' });
+};
+

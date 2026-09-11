@@ -34,22 +34,22 @@ const TOOLKIT_OPTIONS = [
     title: 'Tests Generation',
     description: 'Create comprehensive term exams and standardized tests perfectly aligned with your curriculum.',
     icon: CheckSquare,
-    href: '#',
+    href: '/ai-toolkit/tests',
     color: 'from-emerald-500 to-teal-500',
     bgLight: '#ECFDF5',
     iconColor: '#10B981',
-    available: false
+    available: true
   },
   {
     id: 'lesson-planner',
     title: 'Lesson Planner',
     description: 'Design structured, interactive, and personalized lesson plans tailored to your students\' needs.',
     icon: BookOpen,
-    href: '#',
+    href: '/teacher/copilot',
     color: 'from-purple-500 to-fuchsia-500',
     bgLight: '#FAF5FF',
     iconColor: '#A855F7',
-    available: false
+    available: true
   }
 ];
 

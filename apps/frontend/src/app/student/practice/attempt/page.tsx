@@ -199,57 +199,49 @@ function AttemptPageContent() {
   if (!activeQuiz) return null;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', width: '100%', background: '#F9FAFB', overflowY: 'auto', position: 'absolute', inset: 0, zIndex: 10 }}>
-      {/* Fixed Header */}
-      <div style={{
-        position: 'sticky',
-        top: 0,
-        zIndex: 50,
-        background: '#ffffff',
-        borderBottom: '1px solid var(--border)',
-        padding: '16px 32px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <button onClick={() => router.push('/student/practice')} className="btn btn-outline" style={{ display: 'flex', gap: 6, padding: '6px 12px', alignItems: 'center' }}>
+    <div className="w-full max-w-3xl mx-auto py-2 sm:py-4 px-2 sm:px-4 flex flex-col gap-6">
+      {/* Quiz Header Bar */}
+      <div className="sticky top-20 z-20 bg-white/95 backdrop-blur-md rounded-2xl border border-neutral-200/90 p-3.5 sm:p-4 shadow-xs flex items-center justify-between gap-4 transition-all">
+        <div className="flex items-center gap-3.5 min-w-0">
+          <button
+            type="button"
+            onClick={() => router.push('/student/practice')}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-neutral-200 bg-white text-xs font-semibold text-neutral-700 hover:bg-neutral-50 hover:text-neutral-900 transition-colors shadow-2xs shrink-0 cursor-pointer"
+            title="Exit quiz"
+          >
             <ChevronLeft size={16} /> Exit
           </button>
-          <div>
-            <h1 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', margin: 0 }}>{activeQuiz.topic} Quiz</h1>
-            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>{activeQuiz.subject} &middot; {activeQuiz.questions.length} Questions</p>
+          <div className="min-w-0">
+            <h1 className="text-base sm:text-lg font-bold tracking-tight text-neutral-900 truncate">
+              {activeQuiz.topic} Quiz
+            </h1>
+            <p className="text-xs text-neutral-500 font-medium truncate">
+              {activeQuiz.subject} &middot; {activeQuiz.questions.length} Questions
+            </p>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: 6, 
-            fontSize: 15, 
-            fontWeight: 800, 
-            color: activeQuiz.timeRemainingSeconds < 30 ? '#EF4444' : '#1E3A8A', 
-            background: activeQuiz.timeRemainingSeconds < 30 ? '#FEE2E2' : '#EFF6FF',
-            padding: '8px 16px', 
-            borderRadius: 8, 
-            border: `1px solid ${activeQuiz.timeRemainingSeconds < 30 ? '#FECACA' : '#BFDBFE'}` 
-          }}>
-            <Clock size={18} className={activeQuiz.timeRemainingSeconds < 30 ? 'animate-pulse' : ''} />
-            <span>{formatTime(activeQuiz.timeRemainingSeconds)}</span>
+        <div className="flex items-center gap-3 shrink-0">
+          <div
+            className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl border text-xs sm:text-sm font-bold shadow-2xs ${
+              activeQuiz.timeRemainingSeconds < 30
+                ? 'bg-red-50 text-red-700 border-red-200 animate-pulse'
+                : 'bg-blue-50 text-blue-800 border-blue-200'
+            }`}
+          >
+            <Clock size={16} className={activeQuiz.timeRemainingSeconds < 30 ? 'animate-pulse' : ''} />
+            <span className="font-mono">{formatTime(activeQuiz.timeRemainingSeconds)}</span>
           </div>
         </div>
       </div>
 
-      <div style={{ flex: 1, padding: '32px 0 80px' }}>
-        <div style={{ maxWidth: 720, margin: '0 auto', padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 24 }}>
-          {activeQuiz.isSubmitted && (
-          <div className="card" style={{ textAlign: 'center', padding: '48px 24px', background: '#ECFDF5', borderColor: '#10B981' }}>
-            <Award size={48} color="#10B981" style={{ margin: '0 auto 16px' }} />
-            <h2 style={{ fontSize: 24, fontWeight: 800, marginBottom: 8 }}>Quiz Completed!</h2>
-            <p style={{ fontSize: 16, color: 'var(--text-muted)', marginBottom: 24 }}>You scored {activeQuiz.score} out of {activeQuiz.questions.length}</p>
-            <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>Redirecting back to dashboard...</p>
+      <div className="flex flex-col gap-6 pb-20">
+        {activeQuiz.isSubmitted && (
+          <div className="rounded-2xl border border-emerald-300 bg-emerald-50/70 text-center p-8 sm:p-12 shadow-xs">
+            <Award size={48} className="text-emerald-600 mx-auto mb-4" />
+            <h2 className="text-2xl font-extrabold text-neutral-900 mb-2">Quiz Completed!</h2>
+            <p className="text-base text-neutral-600 mb-6">You scored {activeQuiz.score} out of {activeQuiz.questions.length}</p>
+            <p className="text-sm text-neutral-500 font-medium">Redirecting back to dashboard...</p>
           </div>
         )}
 
@@ -260,7 +252,7 @@ function AttemptPageContent() {
           const isRevealed = revealedAnswers[`active-${qIdx}`] || activeQuiz.isSubmitted;
 
           return (
-            <motion.div key={q.id || qIdx} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="card">
+            <motion.div key={q.id || qIdx} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-2xl border border-neutral-200/90 p-5 sm:p-6 shadow-xs">
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <CheckCircle size={20} color={isAttempted || isRevealed ? '#10B981' : '#9ca3af'} />
@@ -389,22 +381,20 @@ function AttemptPageContent() {
         })}
 
         {!activeQuiz.isSubmitted && (
-          <div style={{ marginTop: 24, padding: 32, background: '#ffffff', borderTop: '1px solid var(--border)', textAlign: 'center', borderRadius: 16, boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
-            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 12 }}>Ready to submit?</h3>
-            <p style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 24 }}>
+          <div className="mt-6 p-6 sm:p-8 bg-white border border-neutral-200/90 text-center rounded-2xl shadow-xs">
+            <h3 className="text-lg font-bold text-neutral-900 mb-2">Ready to submit?</h3>
+            <p className="text-sm text-neutral-500 mb-6">
               Make sure you have answered all questions. You cannot change your answers after submission.
             </p>
             <button 
               type="button" 
               onClick={handleSubmitQuiz} 
-              className="btn btn-dark" 
-              style={{ padding: '8px 16px', fontSize: 13, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 6 }}
+              className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-neutral-900 text-white text-sm font-semibold hover:bg-neutral-800 shadow-xs transition-colors cursor-pointer"
             >
-              <CheckCircle size={16} /> Submit
+              <CheckCircle size={16} /> Submit Quiz
             </button>
           </div>
         )}
-      </div>
       </div>
     </div>
   );

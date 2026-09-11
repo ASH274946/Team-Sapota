@@ -190,12 +190,17 @@ router.get('/attendance', asyncHandler(async (req, res) => {
     return;
   }
 
-  const attendanceDate = new Date(date as string);
+  // Parse as local midnight to avoid UTC off-by-one
+  const [year, month, day] = (date as string).split('-').map(Number);
+  const attendanceDate = new Date(year, month - 1, day, 0, 0, 0, 0);
 
   const records = await prisma.attendanceRecord.findMany({
     where: {
       organizationId: orgId,
-      date: attendanceDate
+      date: {
+        gte: attendanceDate,
+        lt: new Date(year, month - 1, day + 1, 0, 0, 0, 0),
+      }
     }
   });
 
@@ -206,45 +211,65 @@ router.get('/attendance', asyncHandler(async (req, res) => {
 router.post('/attendance', asyncHandler(async (req, res) => {
   const userId = req.user?.id;
   const orgId = req.user?.activeOrganizationId || req.user?.organizationId;
-  const { date, subject, records } = req.body;
+  const { date, subject, records, adminOverride } = req.body;
 
   if (!userId || !orgId) {
     res.status(401).json({ success: false, error: 'Unauthorized' });
     return;
   }
 
-  // Find a class to associate with the attendance records (required by schema)
-  let targetClass = await prisma.class.findFirst({
-    where: { facultyId: userId }
-  });
-
-  if (!targetClass) {
-    targetClass = await prisma.class.findFirst({
-      where: { organizationId: orgId }
-    });
+  if (!date || !records || !Array.isArray(records)) {
+    res.status(400).json({ success: false, error: 'date and records are required' });
+    return;
   }
 
+  // Parse date as local midnight
+  const [year, month, day] = (date as string).split('-').map(Number);
+  const attendanceDate = new Date(year, month - 1, day, 0, 0, 0, 0);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // Block future dates
+  if (attendanceDate > today) {
+    res.status(400).json({ success: false, error: 'Cannot record attendance for a future date.' });
+    return;
+  }
+
+  // Block past dates unless admin override
+  if (attendanceDate < today) {
+    const userRole = req.user?.role;
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN'].includes(userRole || '');
+    if (!isAdmin || !adminOverride) {
+      res.status(403).json({
+        success: false,
+        error: 'Attendance for past dates is locked. Admin permission required to modify.',
+        requiresAdminOverride: true,
+      });
+      return;
+    }
+  }
+
+  // Find a class to associate with the attendance records
+  let targetClass = await prisma.class.findFirst({ where: { facultyId: userId } });
+  if (!targetClass) {
+    targetClass = await prisma.class.findFirst({ where: { organizationId: orgId } });
+  }
   if (!targetClass) {
     res.status(400).json({ success: false, error: 'No classes found in the organization' });
     return;
   }
 
-  const attendanceDate = new Date(date);
-
-  // Process all records
+  // Upsert all records
   for (const record of records) {
-    // Check if record exists for this date and student
     const existing = await prisma.attendanceRecord.findFirst({
-      where: {
-        studentId: record.studentId,
-        date: attendanceDate,
-      }
+      where: { studentId: record.studentId, date: attendanceDate },
     });
 
     if (existing) {
       await prisma.attendanceRecord.update({
         where: { id: existing.id },
-        data: { status: record.status, subject, classId: targetClass.id }
+        data: { status: record.status, subject, classId: targetClass.id },
       });
     } else {
       await prisma.attendanceRecord.create({
@@ -255,8 +280,8 @@ router.post('/attendance', asyncHandler(async (req, res) => {
           date: attendanceDate,
           status: record.status,
           organizationId: orgId,
-          recordedById: userId
-        }
+          recordedById: userId,
+        },
       });
     }
   }

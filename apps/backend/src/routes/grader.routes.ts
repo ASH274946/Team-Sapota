@@ -7,6 +7,7 @@ import { PERMISSIONS } from '../security/permissions';
 import {
   saveGradingConfig,
   getGradingConfig,
+  uploadQuestionPaper,
   runAIEvaluation,
   bulkAIEvaluation,
   getSubmissionEvaluation,
@@ -35,10 +36,11 @@ router.delete('/rubrics/:rubricId', requireRole('TEACHER', 'FACULTY', 'ADMIN', '
 // Assignment grading configuration
 router.post('/assignments/:assignmentId/config', requireRole('TEACHER', 'FACULTY', 'ADMIN', 'SUPER_ADMIN'), requirePermission(PERMISSIONS.GRADE_ASSESSMENT), asyncHandler(saveGradingConfig));
 router.get('/assignments/:assignmentId/config', requireRole('TEACHER', 'FACULTY', 'ADMIN', 'SUPER_ADMIN'), requirePermission(PERMISSIONS.GRADE_ASSESSMENT), asyncHandler(getGradingConfig));
+router.post('/assignments/:assignmentId/question-paper', requireRole('TEACHER', 'FACULTY', 'ADMIN', 'SUPER_ADMIN'), requirePermission(PERMISSIONS.GRADE_ASSESSMENT), uploadMiddleware.single('questionPaper'), asyncHandler(uploadQuestionPaper));
 
 // Faculty views submissions for grading
 router.get('/assignments/:assignmentId/submissions', requireRole('TEACHER', 'FACULTY', 'ADMIN', 'SUPER_ADMIN'), requirePermission(PERMISSIONS.GRADE_ASSESSMENT), asyncHandler(listSubmissions));
-router.post('/assignments/:assignmentId/submissions', requireRole('TEACHER', 'FACULTY', 'ADMIN', 'SUPER_ADMIN'), requirePermission(PERMISSIONS.GRADE_ASSESSMENT), uploadMiddleware.single('files'), asyncHandler(uploadSubmission));
+router.post('/assignments/:assignmentId/submissions', requireRole('TEACHER', 'FACULTY', 'ADMIN', 'SUPER_ADMIN'), requirePermission(PERMISSIONS.GRADE_ASSESSMENT), uploadMiddleware.array('files', 10), asyncHandler(uploadSubmission));
 
 // AI evaluation & manual override
 router.post('/submissions/:submissionId/evaluate', requireRole('TEACHER', 'FACULTY', 'ADMIN', 'SUPER_ADMIN'), requirePermission(PERMISSIONS.GRADE_ASSESSMENT), asyncHandler(runAIEvaluation));
