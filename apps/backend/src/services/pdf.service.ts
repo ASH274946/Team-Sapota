@@ -1,5 +1,4 @@
 import fs from 'fs';
-import { env } from '../config/env';
 import type { IGeneratedPaper } from '../types/models.types';
 import type { ILessonPlanData, ILessonPlanActivity } from '../types/lesson-plan.types';
 import { logger } from '../utils/logger';

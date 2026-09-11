@@ -34,10 +34,10 @@ async function audit() {
 
       console.log(`\n📁 Folder [${folder}/]`);
       console.log(`   - Test Key      : ${testKey}`);
-      console.log(`   - Upload/Save   : SUCCESS`);
+      console.log(`   - Upload/Save   : SUCCESS (${url})`);
       console.log(`   - Exists in R2  : ${exists}`);
       console.log(`   - Read Verified : ${isMatching ? 'MATCHED CONTENT' : 'FAILED'}`);
-      console.log(`   - Presigned URL : OK (Generated)`);
+      console.log(`   - Presigned URL : ${presigned ? 'OK' : 'N/A'}`);
     } catch (err: any) {
       console.error(`Folder [${folder}/] test failed: ${err.message}`);
     }

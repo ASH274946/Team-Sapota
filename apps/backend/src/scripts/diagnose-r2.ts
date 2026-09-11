@@ -1,4 +1,4 @@
-import { S3Client, ListBucketsCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
+import { S3Client, ListBucketsCommand } from '@aws-sdk/client-s3';
 import { env } from '../config/env';
 
 async function diagnose() {
