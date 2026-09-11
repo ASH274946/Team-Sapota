@@ -309,8 +309,8 @@ export function parseAndStructureSyllabus(rawText: string): StructuredUnitItem[]
   if (!rawText || !rawText.trim()) return [];
 
   const rawLines = rawText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  const unitHeaderRegex = /^(?:\*|\-)?\s*(?:\*{1,3}|_{1,3})?\s*(?:Unit|Module|Chapter|Part|Section)\s*([0-9IVXLCDM]+|[a-zA-Z]+)?\s*[:\-\—\.\)]\s*(.*?)(?:\*{1,3}|_{1,3})?$/i;
-  const unitHeaderStandaloneRegex = /^(?:\*|\-)?\s*(?:\*{1,3}|_{1,3})?\s*(?:Unit|Module|Chapter|Part|Section)\s*([0-9IVXLCDM]+)\s*(?:\*{1,3}|_{1,3})?$/i;
+  const unitHeaderRegex = /^(?:[*–-])?\s*(?:\*{1,3}|_{1,3})?\s*(?:Unit|Module|Chapter|Part|Section)\s*([0-9IVXLCDM]+|[a-zA-Z]+)?\s*[:.—)-]\s*(.*?)(?:\*{1,3}|_{1,3})?$/i;
+  const unitHeaderStandaloneRegex = /^(?:[*–-])?\s*(?:\*{1,3}|_{1,3})?\s*(?:Unit|Module|Chapter|Part|Section)\s*([0-9IVXLCDM]+)\s*(?:\*{1,3}|_{1,3})?$/i;
 
   const unitsMap = new Map<number, { title: string; topics: string[] }>();
   let currentUnitNum: number | null = null;
@@ -335,7 +335,7 @@ export function parseAndStructureSyllabus(rawText: string): StructuredUnitItem[]
 
       if (num && !isInvalidUnitHeading(num, titleStr)) {
         currentUnitNum = num;
-        let cleanTitle = titleStr.replace(/^[:\-\—\.\)\s]+/, '').replace(/[\*_]/g, '').trim();
+        let cleanTitle = titleStr.replace(/^[:.—)\s-]+/, '').replace(/[*_]/g, '').trim();
         if (!cleanTitle) cleanTitle = `UNIT ${num}`;
 
         if (!unitsMap.has(num)) {
@@ -358,10 +358,10 @@ export function parseAndStructureSyllabus(rawText: string): StructuredUnitItem[]
     if (currentUnitNum && unitsMap.has(currentUnitNum)) {
       if (isActivityOrJunkLine(line)) continue;
 
-      let cleanTopic = line
-        .replace(/^[•\*\-\+\>\#\d\.\)\s]+/, '')
-        .replace(/[\*_]/g, '')
-        .replace(/[,\-\–\s]+$/, '')
+      const cleanTopic = line
+        .replace(/^[•*+>#\d.)\s-]+/, '')
+        .replace(/[*_]/g, '')
+        .replace(/[,–\s-]+$/, '')
         .trim();
 
       if (cleanTopic.length > 1) {

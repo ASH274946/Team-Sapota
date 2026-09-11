@@ -2,7 +2,6 @@
 
 import React, { useRef, useMemo } from 'react';
 import {
-  FileText,
   Download,
   Printer,
   CheckCircle2,

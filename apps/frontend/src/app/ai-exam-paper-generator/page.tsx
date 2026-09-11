@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { constructMetadata, getFaqSchema, getBreadcrumbSchema } from '@/lib/seo';
-import { CheckCircle2, Sparkles, FileText, ArrowRight, ShieldCheck, Cpu, Layers, Download } from 'lucide-react';
+import { CheckCircle2, Sparkles, ArrowRight, Cpu, Layers, Download } from 'lucide-react';
 
 export const metadata: Metadata = constructMetadata({
   title: 'AI Exam Paper Generator for Colleges & Universities',

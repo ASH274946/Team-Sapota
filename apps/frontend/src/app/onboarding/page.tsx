@@ -20,15 +20,12 @@ import {
   ShieldCheck,
   Check,
   Compass,
-  Award,
   Lightbulb,
   Building2,
   User,
-  Hash,
   Layers,
   Search,
-  X,
-  CheckCircle
+  X
 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
 import { getDashboardRoute } from '@/utils/navigation';

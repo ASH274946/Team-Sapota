@@ -3,8 +3,6 @@ import { generateSingleQuestion, generateMultipleQuestions, GeneratedQuestion } 
 import prisma from '../config/prisma';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
-import fs from 'fs';
-import pdfParse from 'pdf-parse';
 import { StreakService } from '../services/streak.service';
 import { processUploadedFiles } from '../services/document-extractor.service';
 

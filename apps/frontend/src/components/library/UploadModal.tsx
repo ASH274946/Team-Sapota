@@ -1,9 +1,8 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { X, UploadCloud, FileText, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
+import { X, UploadCloud, FileText, AlertCircle, Loader2 } from 'lucide-react';
 import { LibraryService } from '@/services/library.service';
-import { NativeSelect } from '@/components/ui/native-select';
 import { cn } from '@/lib/utils';
 
 interface UploadModalProps {

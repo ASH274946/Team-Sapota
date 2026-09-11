@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { constructMetadata, getFaqSchema, getBreadcrumbSchema } from '@/lib/seo';
-import { Sparkles, ArrowRight, CheckCircle2, FileSpreadsheet, ShieldAlert, Cpu } from 'lucide-react';
+import { Sparkles, ArrowRight, FileSpreadsheet, ShieldAlert } from 'lucide-react';
 
 export const metadata: Metadata = constructMetadata({
   title: 'AI Question Paper Generator from Syllabus & Documents',

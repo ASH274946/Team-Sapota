@@ -4,39 +4,27 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { api } from '@/lib/api';
 import {
   BookOpen,
-  Target,
   FileText,
   BarChart3,
   Plus,
   Check,
   X,
-  History,
   Sparkles,
-  AlertTriangle,
-  CheckCircle2,
-  HelpCircle,
   FolderPlus,
-  RefreshCw,
   Award,
-  Layers,
-  ArrowRight,
-  ChevronDown,
   Loader2,
-  Download,
   Zap,
   BookMarked,
-  Printer,
   UserCheck,
   Trash2,
   Edit3,
   FileUp,
-  FileSpreadsheet,
   Clock
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { COPOMatrix, COPOMatrixData, MatrixRowItem, CourseOutcomeItem, ProgramOutcomeItem } from '@/components/obe/COPOMatrix';
 import { NbaSarReportModal } from '@/components/obe/NbaSarReportModal';
-import { ExamPaperBlueprintModal, ComprehensiveBlueprint, BlueprintSectionData, BlueprintQuestionItem } from '@/components/obe/ExamPaperBlueprintModal';
+import { ExamPaperBlueprintModal, ComprehensiveBlueprint, BlueprintSectionData } from '@/components/obe/ExamPaperBlueprintModal';
 import { SelectDropdown } from '@/components/ui/select-dropdown';
 import { cn } from '@/lib/utils';
 
@@ -108,6 +96,12 @@ const setStorageData = <T,>(key: string, value: T): void => {
     console.error('LocalStorage write failed:', e);
   }
 };
+
+let entityIdCounter = 0;
+function createEntityId(prefix: string): string {
+  entityIdCounter += 1;
+  return `${prefix}-${entityIdCounter}`;
+}
 
 export default function TeacherOBEPage() {
   const [activeTab, setActiveTab] = useState<'units' | 'matrix' | 'blueprints' | 'attainment' | 'sar'>('units');
@@ -655,7 +649,7 @@ interface UploadedFileItem {
       : ['General Curriculum Topics'];
 
     const unitObj: SyllabusUnit = {
-      id: editingUnit ? editingUnit.id : `unit-${Date.now()}`,
+      id: editingUnit ? editingUnit.id : createEntityId('unit'),
       unitNumber: editingUnit ? editingUnit.unitNumber : syllabusUnits.length + 1,
       title: newUnit.title.trim(),
       topics: topicsArray,
@@ -928,7 +922,7 @@ interface UploadedFileItem {
       if (currentUnitNum && unitsMap.has(currentUnitNum)) {
         if (isActivityOrJunkLine(line)) continue;
 
-        let cleanTopic = line
+        const cleanTopic = line
           .replace(/^[•\*\-\+\>\#\d\.\)\s]+/, '')
           .replace(/[\*_]/g, '')
           .replace(/[,\-\–\s]+$/, '')
@@ -1041,7 +1035,7 @@ interface UploadedFileItem {
     // Create unique new items tracking their original file selection index
     const startIndex = uploadedFilesList.length;
     const newItems: UploadedFileItem[] = validFiles.map((f, idx) => ({
-      id: `file-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 7)}`,
+      id: createEntityId(`file-${startIndex + idx}`),
       file: f,
       name: f.name,
       size: f.size,
@@ -1269,7 +1263,7 @@ interface UploadedFileItem {
         const bloom = bloomLevels[Math.min(idx, bloomLevels.length - 1)];
 
         return {
-          id: `unit-${Date.now()}-${seqUnitNumber}`,
+          id: createEntityId(`unit-${seqUnitNumber}`),
           unitNumber: seqUnitNumber,
           title: formattedTitle,
           topics: cand.topics.length > 0 ? cand.topics : ['Core Subject Topics'],
@@ -1294,7 +1288,7 @@ interface UploadedFileItem {
 
     const fallbackUnits: SyllabusUnit[] = [
       {
-        id: `unit-${Date.now()}-1`,
+        id: createEntityId('unit-1'),
         unitNumber: 1,
         title: 'Unit 1: Course Fundamentals & Overview',
         topics: allTopics.length > 0 ? allTopics : ['Core Course Syllabus Concepts'],
@@ -1318,7 +1312,7 @@ interface UploadedFileItem {
     }
 
     const created: Course = {
-      id: `c-${Date.now()}`,
+      id: createEntityId('course'),
       name: newCourse.name.trim(),
       code: newCourse.code.trim().toUpperCase(),
       description: newCourse.description.trim()
@@ -1347,7 +1341,7 @@ interface UploadedFileItem {
     }
 
     const coItem: CourseOutcomeItem = {
-      id: `co-${Date.now()}`,
+      id: createEntityId('co'),
       code: newCO.code.trim().toUpperCase(),
       description: newCO.description.trim(),
       bloomLevel: newCO.bloomLevel
@@ -1381,7 +1375,7 @@ interface UploadedFileItem {
     }
 
     const poItem: ProgramOutcomeItem = {
-      id: `po-${Date.now()}`,
+      id: createEntityId('po'),
       code: newPO.code.trim().toUpperCase(),
       description: newPO.description.trim()
     };

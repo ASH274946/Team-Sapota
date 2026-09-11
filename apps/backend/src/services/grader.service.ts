@@ -1,6 +1,5 @@
 import fs from 'fs/promises';
 import path from 'path';
-import pdfParse from 'pdf-parse';
 import { Prisma } from '@prisma/client';
 import prisma from '../config/prisma';
 import { AIOrchestrator } from './ai/ai-orchestrator.service';

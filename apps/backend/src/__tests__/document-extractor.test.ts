@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import fs from 'fs';
 import {
   extractTextFromFileBuffer,
   processUploadedFiles,
@@ -7,7 +8,6 @@ import {
   isImageDescriptionNoise,
   isMeaningfulSyllabusText,
 } from '../services/document-extractor.service';
-import zlib from 'zlib';
 
 // Helper to create a minimal valid DOCX file buffer (ZIP containing word/document.xml)
 function createMockDocxBuffer(paragraphs: string[]): Buffer {
@@ -175,13 +175,13 @@ describe('Document Extractor Service', () => {
       ];
 
       // Mock fs.readFileSync
-      const fsSpy = vi.spyOn(require('fs'), 'readFileSync').mockImplementation((p: any) => {
+      const fsSpy = vi.spyOn(fs, 'readFileSync').mockImplementation((p: any) => {
         if (p === 'temp/unit1.txt') return file1Buffer;
         if (p === 'temp/unit2.txt') return file2Buffer;
         return Buffer.alloc(0);
       });
-      vi.spyOn(require('fs'), 'existsSync').mockReturnValue(true);
-      vi.spyOn(require('fs'), 'unlinkSync').mockImplementation(() => {});
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'unlinkSync').mockImplementation(() => {});
 
       const batchResult = await processUploadedFiles(mockFiles);
 
@@ -217,12 +217,12 @@ describe('Document Extractor Service', () => {
         },
       ];
 
-      vi.spyOn(require('fs'), 'readFileSync').mockImplementation((p: any) => {
+      vi.spyOn(fs, 'readFileSync').mockImplementation((p: any) => {
         if (p === 'temp/valid.txt') return validBuffer;
         return emptyBuffer;
       });
-      vi.spyOn(require('fs'), 'existsSync').mockReturnValue(true);
-      vi.spyOn(require('fs'), 'unlinkSync').mockImplementation(() => {});
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'unlinkSync').mockImplementation(() => {});
 
       const batchResult = await processUploadedFiles(mockFiles);
 

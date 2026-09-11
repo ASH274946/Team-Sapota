@@ -4,8 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { BloomClassificationBadge, BloomLevel } from './BloomClassificationBadge';
 import { BloomOverrideSelect } from './BloomOverrideSelect';
 import { AccreditationExport } from './AccreditationExport';
-import { Button } from '@/design-system/Button';
-import { Loader2, Save, RefreshCw, AlertCircle, Sparkles, Printer, FileSpreadsheet } from 'lucide-react';
+import { Loader2, Save, AlertCircle, Sparkles, Printer } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export interface CourseOutcomeItem {

@@ -7,11 +7,7 @@ import {
   Printer,
   CheckCircle2,
   X,
-  Award,
-  BookOpen,
-  Layers,
   Sparkles,
-  HelpCircle,
   BarChart3
 } from 'lucide-react';
 import toast from 'react-hot-toast';
