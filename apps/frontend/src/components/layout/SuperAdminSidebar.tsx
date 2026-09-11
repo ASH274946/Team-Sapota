@@ -17,6 +17,8 @@ import {
   Search,
   PanelLeftClose,
   PanelLeftOpen,
+  Layers,
+  Settings,
 } from 'lucide-react';
 import { useSidebarStore } from '@/store/sidebar.store';
 import { useAuthStore } from '@/store/auth.store';
@@ -68,6 +70,7 @@ export function SuperAdminSidebar() {
       items: [
         { href: ROUTES.SUPER_ADMIN.ORGANIZATIONS, label: 'Organizations', icon: Building2 },
         { href: ROUTES.SUPER_ADMIN.USERS, label: 'Global Users', icon: Users },
+        { href: ROUTES.SUPER_ADMIN.SUBSCRIPTIONS, label: 'Subscriptions', icon: Layers },
         {
           href: ROUTES.SUPER_ADMIN.PROVIDERS,
           label: 'AI Providers',
@@ -81,6 +84,7 @@ export function SuperAdminSidebar() {
       items: [
         { href: ROUTES.SUPER_ADMIN.KNOWLEDGE_BASE, label: 'Knowledge Base', icon: BookOpen },
         { href: ROUTES.SUPER_ADMIN.AUDIT, label: 'Audit Logs', icon: History },
+        { href: ROUTES.SUPER_ADMIN.SETTINGS, label: 'Settings', icon: Settings },
       ],
     },
   ];

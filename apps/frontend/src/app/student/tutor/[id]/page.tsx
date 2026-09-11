@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -49,17 +49,7 @@ export default function TutorChatPage() {
   const { user } = useAuthStore();
   const router = useRouter();
 
-  const { streamQuery } = useTutorSocket(id, {
-    onStreamComplete: (message: TutorMessage) => {
-      setMessages((prev) => [...prev, message]);
-      setIsSending(false);
-    },
-    onStreamError: (error: string) => {
-      toast.error(error || 'Streaming failed');
-      resetStream();
-      setIsSending(false);
-    },
-  });
+  const lastQueryRef = useRef('');
 
   const activeStream = useTutorStore((s) => s.activeStream);
   const startStream = useTutorStore((s) => s.startStream);
@@ -73,6 +63,38 @@ export default function TutorChatPage() {
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'standard' | 'hint' | 'socratic'>('standard');
   const [isFlashcardModalOpen, setIsFlashcardModalOpen] = useState(false);
+
+  const socketCallbacks = useMemo(
+    () => ({
+      onStreamComplete: (message: TutorMessage) => {
+        setMessages((prev) => [...prev, message]);
+        setIsSending(false);
+      },
+      onStreamError: async (error: string) => {
+        try {
+          if (lastQueryRef.current) {
+            const res = await sendChatMessage(id, lastQueryRef.current, mode);
+            const assistantMsg: TutorMessage = {
+              id: res.messageId || 'msg-fallback',
+              sessionId: id,
+              role: 'ASSISTANT',
+              content: res.message,
+              createdAt: new Date().toISOString(),
+            };
+            setMessages((prev) => [...prev, assistantMsg]);
+          }
+        } catch {
+          toast.error(error || 'Streaming failed');
+        } finally {
+          useTutorStore.getState().resetStream();
+          setIsSending(false);
+        }
+      },
+    }),
+    [id, mode]
+  );
+
+  const { streamQuery } = useTutorSocket(id, socketCallbacks);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -110,6 +132,7 @@ export default function TutorChatPage() {
     const reqId = `req-${Date.now()}`;
     const optimisticId = `msg-${Date.now()}`;
 
+    lastQueryRef.current = query;
     setInputValue('');
     setIsSending(true);
 
@@ -135,6 +158,7 @@ export default function TutorChatPage() {
           createdAt: new Date().toISOString(),
         };
         setMessages((prev) => [...prev, assistantMsg]);
+        resetStream();
         setIsSending(false);
       }
     } catch {
@@ -151,6 +175,7 @@ export default function TutorChatPage() {
       } catch {
         toast.error('Failed to send message');
       } finally {
+        resetStream();
         setIsSending(false);
       }
     }
@@ -187,7 +212,9 @@ export default function TutorChatPage() {
       }
     : null;
 
-  const displayMessages = streamingMessage ? [...messages, streamingMessage] : messages;
+  const displayMessages = (streamingMessage ? [...messages, streamingMessage] : messages).filter(
+    (m) => m.isStreaming || Boolean(m.content && m.content.trim().length > 0)
+  );
 
   if (isLoading) return <LoadingState lines={8} />;
   if (error || !session) return <ErrorState message={error || 'Session not found'} onRetry={fetchSession} />;

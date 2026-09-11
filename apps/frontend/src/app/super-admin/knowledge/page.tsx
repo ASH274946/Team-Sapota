@@ -1,11 +1,11 @@
 'use client';
 
-import { useRouter } from 'next/navigation';import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
   Search,
   BookOpen,
   PlayCircle,
-  MoreHorizontal,
   ChevronRight,
   Plus,
   FileText,
@@ -13,15 +13,20 @@ import {
   Code,
   Network,
   ShieldCheck,
-  Layers
+  Layers,
+  Download,
+  Trash2,
+  X,
+  Upload,
+  Loader2,
+  FolderOpen,
+  RefreshCw,
 } from 'lucide-react';
-import { PageHeader } from '@/design-system/PageHeader';
-import { Card } from '@/design-system/Card';
-import { LoadingState } from '@/design-system/LoadingState';
-import { ErrorState } from '@/design-system/ErrorState';
+import { api } from '@/lib/api';
 import { adminService } from '@/services/admin.service';
 import { format } from 'date-fns';
 import { NativeSelect } from '@/components/ui/native-select';
+import toast from 'react-hot-toast';
 
 interface KnowledgeStats {
   totalArticles: number;
@@ -30,22 +35,49 @@ interface KnowledgeStats {
   activities: {
     id: string;
     resourceName: string;
+    description?: string;
     category: string;
     type: string;
     organization: string;
+    organizationId?: string;
+    fileUrl: string;
+    fileSize: number;
+    uploadedBy: string;
     lastModified: string;
   }[];
 }
 
+const CATEGORY_PILLS = [
+  'All Resources',
+  'Architecture',
+  'Compliance & Security',
+  'Integration APIs',
+  'User Training',
+  'Organization Flow',
+  'Security Docs',
+];
+
 export default function KnowledgePage() {
   const [data, setData] = useState<KnowledgeStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
   const router = useRouter();
+  const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('All Resources');
   const [isAddResourceModalOpen, setIsAddResourceModalOpen] = useState(false);
   const [isCategoriesModalOpen, setIsCategoriesModalOpen] = useState(false);
+
+  // New Resource Form State
+  const [resourceTitle, setResourceTitle] = useState('');
+  const [resourceDescription, setResourceDescription] = useState('');
+  const [resourceCategory, setResourceCategory] = useState('Architecture');
+  const [resourceType, setResourceType] = useState('DOCUMENT');
+  const [externalUrl, setExternalUrl] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -53,279 +85,496 @@ export default function KnowledgePage() {
       setData(response);
       setError(null);
     } catch (err: any) {
-      setError(err.message || 'Failed to load knowledge base stats');
+      setError(err.message || 'Failed to load knowledge base data');
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
     fetchStats();
-    const interval = setInterval(fetchStats, 10000);
+    const interval = setInterval(fetchStats, 15000);
     return () => clearInterval(interval);
   }, [fetchStats]);
 
-  if (isLoading && !data) return <LoadingState lines={8} />;
-  if (error && !data) return <ErrorState message={error} onRetry={fetchStats} />;
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    fetchStats();
+  };
+
+  const handleCreateResource = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resourceTitle.trim()) {
+      toast.error('Please provide a resource title');
+      return;
+    }
+    if (!selectedFile && !externalUrl.trim()) {
+      toast.error('Please upload a file or provide a valid external URL');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const formData = new FormData();
+      formData.append('title', resourceTitle.trim());
+      formData.append('description', resourceDescription.trim());
+      formData.append('category', resourceCategory);
+      formData.append('resourceType', resourceType);
+      if (externalUrl.trim()) {
+        formData.append('externalUrl', externalUrl.trim());
+      }
+      if (selectedFile) {
+        formData.append('file', selectedFile);
+      }
+
+      await api.post('/admin/knowledge/resources', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      toast.success('Resource published to knowledge repository');
+      setIsAddResourceModalOpen(false);
+      // Reset form
+      setResourceTitle('');
+      setResourceDescription('');
+      setResourceCategory('Architecture');
+      setResourceType('DOCUMENT');
+      setExternalUrl('');
+      setSelectedFile(null);
+      fetchStats();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || err.message || 'Failed to create resource');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteResource = async (id: string, name: string) => {
+    if (!confirm(`Are you sure you want to delete "${name}" from the repository?`)) return;
+    try {
+      setDeletingId(id);
+      await api.delete(`/admin/knowledge/resources/${id}`);
+      toast.success('Resource removed successfully');
+      fetchStats();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || err.message || 'Failed to delete resource');
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const { totalArticles, trainingVideos, categories, activities } = data || {
-    totalArticles: 1482,
-    trainingVideos: 124,
+    totalArticles: 0,
+    trainingVideos: 0,
     categories: [],
     activities: []
   };
 
   const getCategoryIcon = (name: string) => {
-    if (name.includes('Architecture')) return <div style={{ width: 36, height: 36, background: '#F3F4F6', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Network size={18} color="#4B5563" /></div>;
-    if (name.includes('Security')) return <div style={{ width: 36, height: 36, background: '#F3F4F6', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ShieldCheck size={18} color="#4B5563" /></div>;
-    if (name.includes('API')) return <div style={{ width: 36, height: 36, background: '#F3F4F6', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Code size={18} color="#4B5563" /></div>;
-    return <div style={{ width: 36, height: 36, background: '#F3F4F6', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Layers size={18} color="#4B5563" /></div>;
+    const lower = name.toLowerCase();
+    if (lower.includes('architecture')) return <Network className="w-4 h-4 text-blue-600" />;
+    if (lower.includes('security') || lower.includes('compliance')) return <ShieldCheck className="w-4 h-4 text-emerald-600" />;
+    if (lower.includes('api') || lower.includes('integration')) return <Code className="w-4 h-4 text-purple-600" />;
+    if (lower.includes('training') || lower.includes('video')) return <PlayCircle className="w-4 h-4 text-amber-600" />;
+    return <Layers className="w-4 h-4 text-neutral-600" />;
   };
 
   const getTypeStyle = (type: string) => {
-    if (type === 'DOCUMENT') return { bg: '#EFF6FF', color: '#3B82F6' };
-    if (type === 'MEDIA') return { bg: '#FFF7ED', color: '#EA580C' };
-    if (type === 'CODE') return { bg: '#ECFDF5', color: '#10B981' };
-    return { bg: '#F3F4F6', color: '#6B7280' };
+    if (type === 'DOCUMENT' || type === 'PDF') return 'bg-blue-50 text-blue-700 border-blue-200';
+    if (type === 'MEDIA' || type === 'VIDEO') return 'bg-amber-50 text-amber-700 border-amber-200';
+    if (type === 'CODE' || type === 'JSON') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    return 'bg-neutral-100 text-neutral-700 border-neutral-200';
   };
 
   const getTypeIcon = (type: string) => {
-    if (type === 'DOCUMENT') return <FileText size={20} color="#6B7280" />;
-    if (type === 'MEDIA') return <Video size={20} color="#EA580C" />;
-    if (type === 'CODE') return <Code size={20} color="#10B981" />;
-    return <FileText size={20} color="#6B7280" />;
+    if (type === 'DOCUMENT' || type === 'PDF') return <FileText className="w-4 h-4 text-blue-600 shrink-0" />;
+    if (type === 'MEDIA' || type === 'VIDEO') return <Video className="w-4 h-4 text-amber-600 shrink-0" />;
+    if (type === 'CODE' || type === 'JSON') return <Code className="w-4 h-4 text-emerald-600 shrink-0" />;
+    return <FileText className="w-4 h-4 text-neutral-500 shrink-0" />;
   };
 
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 1200, margin: '0 auto', width: '100%', paddingBottom: 48 }}>
-      <PageHeader
-        title="Knowledge Base"
-        subtitle="Centralized repository for system documentation, training materials, and support articles. Manage global resources shared across organizations."
-      />
+  const formatFileSize = (bytes: number) => {
+    if (!bytes) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
 
-      {/* Search and Filters */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 99, padding: '4px 4px 4px 16px' }}>
-          <Search size={18} color="#9CA3AF" />
+  const filteredActivities = useMemo(() => {
+    return activities.filter((act) => {
+      // Category filter
+      let matchesCategory = true;
+      if (activeCategory !== 'All Resources') {
+        const cat = (act.category || '').toLowerCase();
+        const active = activeCategory.toLowerCase();
+        matchesCategory = cat.includes(active) || active.includes(cat);
+      }
+
+      // Search query
+      let matchesSearch = true;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        matchesSearch = 
+          act.resourceName.toLowerCase().includes(q) ||
+          (act.description && act.description.toLowerCase().includes(q)) ||
+          act.category.toLowerCase().includes(q) ||
+          act.organization.toLowerCase().includes(q);
+      }
+
+      return matchesCategory && matchesSearch;
+    });
+  }, [activities, activeCategory, searchQuery]);
+
+  return (
+    <div className="max-w-[1600px] mx-auto text-slate-900 font-sans flex flex-col gap-6 pb-12">
+      {/* Top Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-extrabold text-neutral-900 tracking-tight">
+            Knowledge Base
+          </h1>
+          <p className="text-xs md:text-sm text-neutral-500 font-medium mt-1">
+            Centralized repository for system documentation, training materials, and support articles. Manage global resources shared across organizations.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleRefresh}
+            className="p-2 rounded-xl bg-white border border-neutral-200/90 hover:bg-neutral-50 text-neutral-700 transition-all shadow-2xs"
+            title="Refresh Knowledge Base"
+          >
+            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+          </button>
+          <button
+            onClick={() => setIsAddResourceModalOpen(true)}
+            className="px-4 py-2.5 rounded-xl bg-[#e05934] hover:bg-[#c94a2a] text-white text-xs font-bold transition-all shadow-xs flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Resource</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Search and Category Filters */}
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center bg-white border border-neutral-200/90 rounded-2xl px-4 py-1.5 shadow-2xs focus-within:ring-2 focus-within:ring-[#e05934] transition-all">
+          <Search className="w-4 h-4 text-neutral-400 shrink-0 mr-3" />
           <input 
             type="text" 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search documentation, articles, or training modules..." 
-            style={{ flex: 1, border: 'none', outline: 'none', padding: '12px 12px', fontSize: 14, color: '#111827' }}
+            className="w-full bg-transparent border-none outline-none py-2 text-xs md:text-sm text-neutral-900 placeholder:text-neutral-400 font-medium"
           />
-          <button style={{ background: '#000000', color: '#FFFFFF', border: 'none', borderRadius: 99, padding: '10px 24px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+          {searchQuery && (
+            <button 
+              onClick={() => setSearchQuery('')}
+              className="p-1 hover:bg-neutral-100 rounded-lg text-neutral-400 mr-2"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+          <button 
+            onClick={() => {}}
+            className="bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-bold px-4 py-2 rounded-xl transition-all shadow-xs"
+          >
             Search
           </button>
         </div>
 
-        <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 4 }}>
-          {['All Resources', 'System Admin', 'User Training', 'API Reference', 'Organization Onboarding', 'Security Docs'].map((pill, i) => {
+        {/* Category Filter Pills */}
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+          {CATEGORY_PILLS.map((pill) => {
             const isActive = activeCategory === pill;
             return (
-            <button 
-              key={i} 
-              onClick={() => setActiveCategory(pill)}
-              style={{ 
-              whiteSpace: 'nowrap',
-              padding: '8px 16px', 
-              borderRadius: 99, 
-              fontSize: 13, 
-              fontWeight: 600,
-              cursor: 'pointer',
-              border: isActive ? 'none' : '1px solid #E5E7EB',
-              background: isActive ? '#000000' : '#FFFFFF',
-              color: isActive ? '#FFFFFF' : '#4B5563',
-            }}>
-              {pill}
-            </button>
-          )})}
+              <button 
+                key={pill} 
+                onClick={() => setActiveCategory(pill)}
+                className={`whitespace-nowrap px-4 py-2 rounded-xl text-xs font-bold transition-all border ${
+                  isActive 
+                    ? 'bg-neutral-900 text-white border-neutral-900 shadow-xs' 
+                    : 'bg-white text-neutral-600 border-neutral-200/90 hover:bg-neutral-50 hover:text-neutral-900'
+                }`}
+              >
+                {pill}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Top Grid: Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-        <Card padding="24px" style={{ background: '#FFFFFF', borderRadius: 20, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 10, background: '#F3F4F6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <BookOpen size={20} color="#374151" />
+      {/* Top Grid: Real Live Metrics */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="p-6 rounded-2xl border border-neutral-200/90 bg-white shadow-xs flex flex-col justify-between">
+          <div className="flex justify-between items-start mb-2">
+            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+              <BookOpen className="w-5 h-5" />
             </div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#10B981', background: '#ECFDF5', padding: '4px 10px', borderRadius: 99 }}>
-              +12 Today
-            </div>
+            <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+              Live Database
+            </span>
           </div>
-          <div style={{ fontSize: 13, color: '#6B7280', fontWeight: 600, marginBottom: 4 }}>Total Articles</div>
-          <div style={{ fontSize: 36, fontWeight: 800, color: '#111827' }}>
-            {totalArticles.toLocaleString()}
+          <span className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Total Articles & Docs</span>
+          <div className="text-3xl font-extrabold text-neutral-900 tracking-tight mt-1">
+            {isLoading ? <div className="skeleton h-9 w-24 rounded-lg" /> : totalArticles}
           </div>
-        </Card>
+          <span className="text-xs text-neutral-500 font-medium mt-1">
+            {categories.length} Knowledge Categories Indexed
+          </span>
+        </div>
 
-        <Card padding="24px" style={{ background: '#FFFFFF', borderRadius: 20, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 10, background: '#FFF7ED', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <PlayCircle size={20} color="#D97706" />
+        <div className="p-6 rounded-2xl border border-neutral-200/90 bg-white shadow-xs flex flex-col justify-between">
+          <div className="flex justify-between items-start mb-2">
+            <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+              <PlayCircle className="w-5 h-5" />
             </div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280' }}>
-              85% Completion
-            </div>
+            <span className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full">
+              Interactive Media
+            </span>
           </div>
-          <div style={{ fontSize: 13, color: '#6B7280', fontWeight: 600, marginBottom: 4 }}>Training Videos</div>
-          <div style={{ fontSize: 36, fontWeight: 800, color: '#111827' }}>
-            {trainingVideos.toLocaleString()}
+          <span className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Training Videos & Tutorials</span>
+          <div className="text-3xl font-extrabold text-neutral-900 tracking-tight mt-1">
+            {isLoading ? <div className="skeleton h-9 w-24 rounded-lg" /> : trainingVideos}
           </div>
-        </Card>
+          <span className="text-xs text-neutral-500 font-medium mt-1">
+            Multimedia Video Assets & Guides
+          </span>
+        </div>
       </div>
 
-      {/* Bottom Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 20 }}>
+      {/* Main Grid: Equal Stretched Height with Static Bottom Anchored Footer */}
+      <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] items-stretch gap-6">
         {/* Browse Categories Sidebar */}
-        <Card padding="24px" style={{ background: '#FFFFFF', borderRadius: 20 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#111827' }}>Browse Categories</h3>
-            <MoreHorizontal size={20} color="#9CA3AF" cursor="pointer" />
-          </div>
+        <div className="rounded-2xl border border-neutral-200/90 bg-white shadow-xs p-6 flex flex-col justify-between h-full min-h-[460px]">
+          <div>
+            <div className="flex justify-between items-center mb-5 pb-3 border-b border-neutral-100">
+              <h3 className="text-sm font-bold text-neutral-900">Browse Categories</h3>
+              <FolderOpen className="w-4 h-4 text-neutral-400" />
+            </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 24 }}>
-            {categories.map((cat, idx) => (
-              <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ width: 40, height: 40, background: '#F9FAFB', border: '1px solid #F3F4F6', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <BookOpen size={18} color="#4B5563" />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: '#111827' }}>{cat.name}</div>
-                    <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>{cat.count} Articles</div>
-                  </div>
+            <div className="flex flex-col gap-3">
+              {isLoading ? (
+                <div className="space-y-3">
+                  {[1, 2, 3, 4].map(i => <div key={i} className="skeleton h-12 rounded-xl" />)}
                 </div>
-                <ChevronRight size={18} color="#D1D5DB" />
-              </div>
-            ))}
+              ) : categories.length === 0 ? (
+                <div className="text-xs text-neutral-400 py-6 text-center">No categories yet</div>
+              ) : (
+                categories.map((cat, idx) => {
+                  const isSelected = activeCategory.toLowerCase() === cat.name.toLowerCase();
+                  return (
+                    <div 
+                      key={idx} 
+                      onClick={() => setActiveCategory(cat.name)}
+                      className={`flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all border ${
+                        isSelected 
+                          ? 'bg-neutral-900 text-white border-neutral-900 shadow-xs' 
+                          : 'bg-neutral-50 hover:bg-neutral-100 border-neutral-200/60 text-neutral-900'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isSelected ? 'bg-neutral-800 text-white' : 'bg-white text-neutral-700 shadow-2xs'}`}>
+                          {getCategoryIcon(cat.name)}
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold">{cat.name}</div>
+                          <div className={`text-[11px] ${isSelected ? 'text-neutral-300' : 'text-neutral-500'}`}>
+                            {cat.count} {cat.count === 1 ? 'Resource' : 'Resources'}
+                          </div>
+                        </div>
+                      </div>
+                      <ChevronRight className={`w-4 h-4 ${isSelected ? 'text-neutral-300' : 'text-neutral-400'}`} />
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
 
-          <button 
-            onClick={() => setIsCategoriesModalOpen(true)}
-            style={{ width: '100%', padding: '12px', background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 10, fontSize: 14, fontWeight: 600, color: '#374151', cursor: 'pointer' }}>
-            View All Categories
-          </button>
-        </Card>
+          <div className="pt-4 mt-auto border-t border-neutral-100">
+            <button 
+              onClick={() => setIsCategoriesModalOpen(true)}
+              className="w-full py-2.5 px-4 bg-white hover:bg-neutral-50 border border-neutral-200/90 rounded-xl text-xs font-bold text-neutral-800 transition-all shadow-2xs text-center"
+            >
+              View All Categories
+            </button>
+          </div>
+        </div>
 
-        {/* Recent Repository Activity */}
-        <Card padding="0" style={{ background: '#FFFFFF', borderRadius: 20, overflow: 'hidden' }}>
-          <div style={{ padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F3F4F6' }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#4B5563' }}>Recent Repository Activity</h3>
+        {/* Recent Repository Activity: Table with Static Anchored Footer */}
+        <div className="rounded-2xl border border-neutral-200/90 bg-white shadow-xs overflow-hidden flex flex-col justify-between h-full min-h-[460px]">
+          {/* Card Header */}
+          <div className="p-5 flex justify-between items-center border-b border-neutral-100 bg-neutral-50/50">
+            <div>
+              <h3 className="text-sm font-bold text-neutral-900">Recent Repository Activity</h3>
+              <p className="text-[11px] text-neutral-500 font-medium mt-0.5">
+                Live database resources, handouts, whitepapers, and guides
+              </p>
+            </div>
             <button 
               onClick={() => setIsAddResourceModalOpen(true)}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#000000', color: '#FFFFFF', border: 'none', padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-              <Plus size={16} /> Add Resource
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-neutral-900 hover:bg-neutral-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
+            >
+              <Plus className="w-3.5 h-3.5" /> 
+              <span>Add Resource</span>
             </button>
           </div>
 
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid #F3F4F6' }}>
-                <th style={{ padding: '16px 24px', fontSize: 11, fontWeight: 700, color: '#6B7280', letterSpacing: '0.05em' }}>RESOURCE NAME</th>
-                <th style={{ padding: '16px 24px', fontSize: 11, fontWeight: 700, color: '#6B7280', letterSpacing: '0.05em' }}>TYPE</th>
-                <th style={{ padding: '16px 24px', fontSize: 11, fontWeight: 700, color: '#6B7280', letterSpacing: '0.05em' }}>ORGANIZATION</th>
-                <th style={{ padding: '16px 24px', fontSize: 11, fontWeight: 700, color: '#6B7280', letterSpacing: '0.05em' }}>LAST MODIFIED</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(() => {
-                const filteredActivities = activities.filter((act: any) => {
-                  if (activeCategory === 'All Resources') return true;
-                  
-                  const cat = act.category || '';
-                  if (activeCategory === 'System Admin') return cat.includes('Technical') || cat.includes('System');
-                  if (activeCategory === 'User Training') return cat.includes('User');
-                  if (activeCategory === 'API Reference') return cat.includes('API') || act.resourceName?.includes('API');
-                  if (activeCategory === 'Organization Onboarding') return cat.includes('Legal') || cat.includes('Org');
-                  if (activeCategory === 'Security Docs') return cat.includes('Security') || act.resourceName?.includes('Security');
-                  
-                  return cat === activeCategory;
-                });
-
-                if (filteredActivities.length === 0) {
-                  return (
-                    <tr>
-                      <td colSpan={4} style={{ padding: '32px 24px', textAlign: 'center', color: '#6B7280', fontSize: 13 }}>
-                        No recent activity found for this category.
-                      </td>
-                    </tr>
-                  );
-                }
-
-                return filteredActivities.map((act, idx) => {
-                  const style = getTypeStyle(act.type);
-                  return (
-                    <tr key={act.id} style={{ borderBottom: idx === filteredActivities.length - 1 ? 'none' : '1px solid #F3F4F6' }}>
-                      <td style={{ padding: '20px 24px' }}>
-                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                          {getTypeIcon(act.type)}
-                          <div>
-                            <div style={{ fontSize: 14, fontWeight: 600, color: '#111827', marginBottom: 2 }}>{act.resourceName}</div>
-                            <div style={{ fontSize: 12, color: '#6B7280' }}>{act.category}</div>
+          {/* Table Container (flex-1 so table fills space and footer stays static at the bottom) */}
+          <div className="flex-1 overflow-x-auto flex flex-col">
+            {isLoading ? (
+              <div className="p-6 space-y-3 flex-1">
+                {[1, 2, 3, 4, 5].map(i => <div key={i} className="skeleton h-12 rounded-xl" />)}
+              </div>
+            ) : filteredActivities.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center p-12 text-center">
+                <FileText className="w-10 h-10 text-neutral-300 mb-2" />
+                <h4 className="text-sm font-bold text-neutral-800">No Resources Found</h4>
+                <p className="text-xs text-neutral-400 mt-1 max-w-sm">
+                  {searchQuery 
+                    ? `No resources matching "${searchQuery}" in ${activeCategory}.` 
+                    : `No items in ${activeCategory}. Click "+ Add Resource" to upload materials.`}
+                </p>
+              </div>
+            ) : (
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-neutral-100 bg-neutral-50/50 text-[11px] font-bold uppercase tracking-wider text-neutral-400">
+                    <th className="py-3.5 px-6">Resource Name</th>
+                    <th className="py-3.5 px-4">Type</th>
+                    <th className="py-3.5 px-4">Organization</th>
+                    <th className="py-3.5 px-4">Last Modified</th>
+                    <th className="py-3.5 px-6 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100">
+                  {filteredActivities.map((act) => {
+                    const typeStyle = getTypeStyle(act.type);
+                    return (
+                      <tr key={act.id} className="hover:bg-neutral-50/60 transition-colors">
+                        <td className="py-3.5 px-6">
+                          <div className="flex items-start gap-3">
+                            <div className="mt-0.5">{getTypeIcon(act.type)}</div>
+                            <div>
+                              <div className="font-bold text-neutral-900 text-xs">
+                                {act.resourceName}
+                              </div>
+                              <div className="text-neutral-500 text-[11px] font-medium flex items-center gap-2 mt-0.5">
+                                <span>{act.category}</span>
+                                {act.fileSize > 0 && (
+                                  <>
+                                    <span>•</span>
+                                    <span>{formatFileSize(act.fileSize)}</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                      </td>
-                      <td style={{ padding: '20px 24px' }}>
-                        <span style={{ 
-                          display: 'inline-block',
-                          padding: '4px 10px',
-                          background: style.bg,
-                          color: style.color,
-                          borderRadius: 6,
-                          fontSize: 10,
-                          fontWeight: 800,
-                          letterSpacing: '0.05em'
-                        }}>
-                          {act.type}
-                        </span>
-                      </td>
-                      <td style={{ padding: '20px 24px', fontSize: 13, color: '#4B5563' }}>
-                        {act.organization}
-                      </td>
-                      <td style={{ padding: '20px 24px' }}>
-                        <div style={{ fontSize: 13, color: '#4B5563', marginBottom: 2 }}>
-                          {format(new Date(act.lastModified), 'dd MMM yyyy')}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                });
-              })()}
-            </tbody>
-          </table>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${typeStyle}`}>
+                            {act.type}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-neutral-600 font-medium">
+                          {act.organization}
+                        </td>
+                        <td className="py-3.5 px-4 text-neutral-500 font-medium">
+                          {act.lastModified ? format(new Date(act.lastModified), 'dd MMM yyyy') : 'Recently'}
+                        </td>
+                        <td className="py-3.5 px-6 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            {act.fileUrl && (
+                              <a
+                                href={act.fileUrl.startsWith('http') ? act.fileUrl : act.fileUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-1.5 rounded-lg border border-neutral-200 hover:bg-neutral-100 text-neutral-600 hover:text-neutral-900 transition-all"
+                                title="Open or Download Resource"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                              </a>
+                            )}
+                            <button
+                              onClick={() => handleDeleteResource(act.id, act.resourceName)}
+                              disabled={deletingId === act.id}
+                              className="p-1.5 rounded-lg border border-rose-200 hover:bg-rose-50 text-rose-600 transition-all disabled:opacity-50"
+                              title="Delete Resource"
+                            >
+                              {deletingId === act.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
 
-          <div style={{ padding: '16px', textAlign: 'center', borderTop: '1px solid #F3F4F6', background: '#F9FAFB' }}>
+          {/* Static Anchored Bottom Footer */}
+          <div className="p-4 text-center border-t border-neutral-100 bg-neutral-50/60 mt-auto">
             <button 
               onClick={() => router.push('/super-admin/system-health')}
-              style={{ background: 'transparent', border: 'none', fontSize: 13, fontWeight: 600, color: '#6B7280', cursor: 'pointer' }}>
+              className="text-xs font-bold text-neutral-600 hover:text-neutral-900 transition-colors"
+            >
               See full activity log
             </button>
           </div>
-        </Card>
+        </div>
       </div>
 
       {/* View All Categories Modal */}
       {isCategoriesModalOpen && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#FFF', borderRadius: 16, width: '100%', maxWidth: 480, padding: 32, display: 'flex', flexDirection: 'column', gap: 24, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
-            <div>
-              <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0, marginBottom: 8, color: '#111827' }}>All Categories</h2>
-              <p style={{ fontSize: 14, color: '#6B7280', margin: 0 }}>Browse all available knowledge base categories.</p>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-neutral-200 shadow-xl max-w-md w-full p-6 flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex justify-between items-start">
+              <div>
+                <h3 className="text-base font-extrabold text-neutral-900">All Knowledge Categories</h3>
+                <p className="text-xs text-neutral-500 mt-0.5">Browse all categories in the central repository</p>
+              </div>
+              <button 
+                onClick={() => setIsCategoriesModalOpen(false)}
+                className="p-1.5 rounded-xl hover:bg-neutral-100 text-neutral-400 hover:text-neutral-700"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 300, overflowY: 'auto' }}>
+
+            <div className="flex flex-col gap-2 max-h-72 overflow-y-auto pr-1">
               {categories.map((cat, idx) => (
-                <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px', border: '1px solid #F3F4F6', borderRadius: 10 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: '#111827' }}>{cat.name}</div>
-                  <div style={{ fontSize: 12, color: '#6B7280' }}>{cat.count} Articles</div>
+                <div 
+                  key={idx} 
+                  onClick={() => {
+                    setActiveCategory(cat.name);
+                    setIsCategoriesModalOpen(false);
+                  }}
+                  className="flex items-center justify-between p-3 rounded-xl border border-neutral-100 hover:bg-neutral-50 cursor-pointer transition-all"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-neutral-100 flex items-center justify-center">
+                      {getCategoryIcon(cat.name)}
+                    </div>
+                    <span className="text-xs font-bold text-neutral-900">{cat.name}</span>
+                  </div>
+                  <span className="text-xs font-semibold text-neutral-500 bg-neutral-100 px-2.5 py-0.5 rounded-full">
+                    {cat.count}
+                  </span>
                 </div>
               ))}
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
-              <button 
+            <div className="flex justify-end pt-2 border-t border-neutral-100">
+              <button
                 onClick={() => setIsCategoriesModalOpen(false)}
-                style={{ padding: '10px 16px', background: '#000', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, color: '#FFF', cursor: 'pointer' }}>
+                className="px-4 py-2 bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-bold rounded-xl transition-all"
+              >
                 Close
               </button>
             </div>
@@ -335,44 +584,147 @@ export default function KnowledgePage() {
 
       {/* Add Resource Modal */}
       {isAddResourceModalOpen && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#FFF', borderRadius: 16, width: '100%', maxWidth: 480, padding: 32, display: 'flex', flexDirection: 'column', gap: 24, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
-            <div>
-              <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0, marginBottom: 8, color: '#111827' }}>Add New Resource</h2>
-              <p style={{ fontSize: 14, color: '#6B7280', margin: 0 }}>Upload a new document or link a training material.</p>
-            </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-neutral-200 shadow-xl max-w-lg w-full p-6 flex flex-col gap-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex justify-between items-start pb-3 border-b border-neutral-100">
               <div>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Resource Title</label>
-                <input type="text" placeholder="e.g. Q3 Architecture Review" style={{ width: '100%', padding: '10px 12px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 14, outline: 'none' }} />
+                <h3 className="text-base font-extrabold text-neutral-900">Add New Knowledge Resource</h3>
+                <p className="text-xs text-neutral-500 mt-0.5">Upload a document to blob storage or link external materials</p>
               </div>
-              <div>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Category</label>
-                <NativeSelect style={{ width: '100%', padding: '10px 12px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 14, outline: 'none', backgroundColor: '#FFF' }}>
-                  {categories.map(cat => (
-                    <option key={cat.name} value={cat.name}>{cat.name}</option>
-                  ))}
-                </NativeSelect>
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>File or Link URL</label>
-                <input type="text" placeholder="https://..." style={{ width: '100%', padding: '10px 12px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 14, outline: 'none' }} />
-              </div>
+              <button 
+                onClick={() => setIsAddResourceModalOpen(false)}
+                className="p-1.5 rounded-xl hover:bg-neutral-100 text-neutral-400 hover:text-neutral-700"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
 
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 8 }}>
-              <button 
-                onClick={() => setIsAddResourceModalOpen(false)}
-                style={{ padding: '10px 16px', background: '#FFF', border: '1px solid #E5E7EB', borderRadius: 8, fontSize: 14, fontWeight: 600, color: '#374151', cursor: 'pointer' }}>
-                Cancel
-              </button>
-              <button 
-                onClick={() => setIsAddResourceModalOpen(false)}
-                style={{ padding: '10px 16px', background: '#000', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, color: '#FFF', cursor: 'pointer' }}>
-                Save Resource
-              </button>
-            </div>
+            <form onSubmit={handleCreateResource} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-neutral-700 mb-1.5">
+                  Resource Title <span className="text-rose-500">*</span>
+                </label>
+                <input 
+                  type="text" 
+                  value={resourceTitle}
+                  onChange={(e) => setResourceTitle(e.target.value)}
+                  placeholder="e.g. Q3 Security & Audit Guidelines" 
+                  required
+                  className="w-full px-3.5 py-2.5 bg-neutral-50 border border-neutral-200/90 rounded-xl text-xs font-medium text-neutral-900 focus:outline-none focus:ring-2 focus:ring-[#e05934] transition-all"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-neutral-700 mb-1.5">
+                    Category <span className="text-rose-500">*</span>
+                  </label>
+                  <NativeSelect
+                    value={resourceCategory}
+                    onChange={(e) => setResourceCategory(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-neutral-50 border border-neutral-200/90 rounded-xl text-xs font-medium text-neutral-900 focus:outline-none focus:ring-2 focus:ring-[#e05934] transition-all"
+                  >
+                    <option value="Architecture">Architecture</option>
+                    <option value="Compliance & Security">Compliance & Security</option>
+                    <option value="Integration APIs">Integration APIs</option>
+                    <option value="User Training">User Training</option>
+                    <option value="Organization Flow">Organization Flow</option>
+                    <option value="Security Docs">Security Docs</option>
+                    <option value="System Admin">System Admin</option>
+                  </NativeSelect>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-neutral-700 mb-1.5">
+                    Resource Type
+                  </label>
+                  <NativeSelect
+                    value={resourceType}
+                    onChange={(e) => setResourceType(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-neutral-50 border border-neutral-200/90 rounded-xl text-xs font-medium text-neutral-900 focus:outline-none focus:ring-2 focus:ring-[#e05934] transition-all"
+                  >
+                    <option value="DOCUMENT">Document (PDF / Text)</option>
+                    <option value="MEDIA">Media / Video</option>
+                    <option value="CODE">Code / JSON / API</option>
+                    <option value="GUIDELINE">Policy / Guideline</option>
+                  </NativeSelect>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-neutral-700 mb-1.5">
+                  Description / Overview
+                </label>
+                <textarea
+                  value={resourceDescription}
+                  onChange={(e) => setResourceDescription(e.target.value)}
+                  placeholder="Summary of document purpose and guidelines..."
+                  rows={2}
+                  className="w-full px-3.5 py-2 bg-neutral-50 border border-neutral-200/90 rounded-xl text-xs font-medium text-neutral-900 focus:outline-none focus:ring-2 focus:ring-[#e05934] transition-all resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-neutral-700 mb-1.5">
+                  Upload File (Stored in Blob Storage)
+                </label>
+                <div className="border border-dashed border-neutral-300 rounded-xl p-4 bg-neutral-50/50 hover:bg-neutral-50 text-center flex flex-col items-center justify-center cursor-pointer relative">
+                  <input 
+                    type="file"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        setSelectedFile(e.target.files[0]);
+                      }
+                    }}
+                    className="absolute inset-0 opacity-0 cursor-pointer"
+                  />
+                  <Upload className="w-5 h-5 text-neutral-400 mb-1.5" />
+                  <span className="text-xs font-bold text-neutral-700">
+                    {selectedFile ? selectedFile.name : 'Click or drop file to upload'}
+                  </span>
+                  <span className="text-[10px] text-neutral-400 mt-0.5">
+                    {selectedFile ? `${formatFileSize(selectedFile.size)} • Ready to store` : 'PDF, DOCX, MP4, JSON, TXT up to 50MB'}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-neutral-700 mb-1.5">
+                  Or External Link URL
+                </label>
+                <input 
+                  type="url" 
+                  value={externalUrl}
+                  onChange={(e) => setExternalUrl(e.target.value)}
+                  placeholder="https://docs.example.com/spec or https://youtube.com/..." 
+                  className="w-full px-3.5 py-2.5 bg-neutral-50 border border-neutral-200/90 rounded-xl text-xs font-medium text-neutral-900 focus:outline-none focus:ring-2 focus:ring-[#e05934] transition-all"
+                />
+              </div>
+
+              <div className="flex gap-2 justify-end pt-3 border-t border-neutral-100">
+                <button 
+                  type="button"
+                  onClick={() => setIsAddResourceModalOpen(false)}
+                  className="px-4 py-2.5 bg-white hover:bg-neutral-50 border border-neutral-200/90 rounded-xl text-xs font-bold text-neutral-700 transition-all"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-5 py-2.5 bg-[#e05934] hover:bg-[#c94a2a] disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-all shadow-xs flex items-center gap-2"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <span>Save Resource</span>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

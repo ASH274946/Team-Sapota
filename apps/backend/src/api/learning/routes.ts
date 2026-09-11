@@ -28,11 +28,13 @@ router.use(authenticate);
 
 router.get('/profiles', asyncHandler(listProfiles));
 router.get('/profiles/:studentId', validate(studentIdParamSchema), asyncHandler(getProfile));
+router.get('/students/:studentId/profile', validate(studentIdParamSchema), asyncHandler(getProfile));
 router.put('/profiles/:studentId', validate(updateProfileSchema), asyncHandler(updateProfile));
 router.get('/profiles/:studentId/predictions', validate(studentIdParamSchema), asyncHandler(getPredictions));
 router.post('/profiles/:studentId/refresh', validate(studentIdParamSchema), asyncHandler(refreshProfile));
 
 router.get('/study-plans/:studentId', validate(studentIdParamSchema), asyncHandler(getStudyPlans));
+router.get('/students/:studentId/study-plan', validate(studentIdParamSchema), asyncHandler(getStudyPlans));
 router.post('/study-plans/:studentId/generate', validate(studentIdParamSchema), asyncHandler(generateStudyPlan));
 
 router.get('/insights/:studentId', validate(studentIdParamSchema), asyncHandler(getInsights));

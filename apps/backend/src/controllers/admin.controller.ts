@@ -16,6 +16,7 @@ import { createInvitation } from '../services/invitation.service';
 import { processCsvImport } from '../services/csv-import.service';
 import * as argon2 from 'argon2';
 import * as fs from 'fs';
+import * as path from 'path';
 
 // ── In-Memory System Settings Store (Simulating Admin System Settings) ──
 let systemSettings = {
@@ -147,8 +148,23 @@ export class AdminController {
         res.status(403).json({ success: false, error: 'Access denied: Only SUPER_ADMIN can suspend organizations.' });
         return;
       }
-      const { suspend } = req.body;
-      const org = await OrganizationService.suspendOrganization(req.params.id, suspend);
+      const { id } = req.params;
+      if (!id) {
+        res.status(400).json({ success: false, error: 'Organization ID is required' });
+        return;
+      }
+      let shouldSuspend = true;
+      if (req.body.action) {
+        shouldSuspend = req.body.action === 'suspend';
+      } else if (req.body.status) {
+        shouldSuspend = req.body.status === 'SUSPENDED';
+      } else if (typeof req.body.suspend === 'boolean') {
+        shouldSuspend = req.body.suspend;
+      } else {
+        const current = await prisma.organization.findUnique({ where: { id }, select: { status: true } });
+        shouldSuspend = current?.status === 'ACTIVE';
+      }
+      const org = await OrganizationService.suspendOrganization(id, shouldSuspend);
       res.json({ success: true, data: org });
     } catch (err: any) {
       logger.error(`[Admin:suspendOrganization] ${err}`);
@@ -2531,95 +2547,123 @@ export class AdminController {
         return;
       }
 
-      // 1. Dynamic KPIs: Use actual user count and organization count as seeds
-      const totalUsers = await prisma.user.count() || 1;
-      const totalOrgs = await prisma.organization.count() || 1;
-
-      // Seed realistic numbers
-      const totalArticles = totalUsers * 12 + 1400; // e.g. 1482
-      const trainingVideos = totalOrgs * 3 + 120; // e.g. 124
-
-      // Categories
-      const categories = [
-        { name: 'Architecture', count: Math.floor(totalArticles * 0.05) },
-        { name: 'Compliance & Security', count: Math.floor(totalArticles * 0.02) },
-        { name: 'Integration APIs', count: Math.floor(totalArticles * 0.08) },
-        { name: 'Organization Flow', count: Math.floor(totalArticles * 0.03) }
-      ];
-
-      // 2. Recent Repository Activity based on actual AuditLogs
-      const recentLogs = await prisma.auditLog.findMany({
-        orderBy: { createdAt: 'desc' },
-        take: 3,
-        include: {
-          user: true,
-          organization: true
+      // Check if LibraryResource has entries, if not seed initial default official documents
+      const count = await prisma.libraryResource.count();
+      if (count === 0) {
+        const adminUser = (await prisma.user.findFirst({ where: { role: 'SUPER_ADMIN' } })) || (await prisma.user.findFirst());
+        const defaultOrg = await prisma.organization.findFirst();
+        if (adminUser && defaultOrg) {
+          await prisma.libraryResource.createMany({
+            data: [
+              {
+                title: 'Multi-Tenant System Architecture Overview',
+                description: 'Complete high-level architectural diagram, database schema specifications, and security model.',
+                resourceType: 'DOCUMENT',
+                subject: 'Architecture',
+                className: 'System Docs',
+                fileUrl: '/uploads/system-architecture.pdf',
+                fileSize: 2450000,
+                uploadedById: adminUser.id,
+                organizationId: defaultOrg.id,
+              },
+              {
+                title: 'Data Protection & Security Compliance Guide',
+                description: 'Institutional security guidelines, encryption policies, and compliance procedures.',
+                resourceType: 'DOCUMENT',
+                subject: 'Compliance & Security',
+                className: 'Policy',
+                fileUrl: '/uploads/security-compliance.pdf',
+                fileSize: 1820000,
+                uploadedById: adminUser.id,
+                organizationId: defaultOrg.id,
+              },
+              {
+                title: 'VidyaAI REST API & Webhook Reference',
+                description: 'Full REST API endpoint specifications, authentication tokens, rate limits, and payload schemas.',
+                resourceType: 'CODE',
+                subject: 'Integration APIs',
+                className: 'Developer Docs',
+                fileUrl: '/uploads/api-reference.json',
+                fileSize: 980000,
+                uploadedById: adminUser.id,
+                organizationId: defaultOrg.id,
+              },
+              {
+                title: 'Institutional Onboarding & Classroom Setup Tutorial',
+                description: 'Comprehensive walkthrough for faculty onboarding, department structures, and semester enrollment.',
+                resourceType: 'MEDIA',
+                subject: 'User Training',
+                className: 'Video Training',
+                fileUrl: 'https://youtube.com/watch?v=vidya-onboarding',
+                fileSize: 15400000,
+                uploadedById: adminUser.id,
+                organizationId: defaultOrg.id,
+              },
+              {
+                title: 'Multi-Organization User Flow & Governance Policy',
+                description: 'Guidelines on managing tenant roles, cross-institution permissions, and lifecycle management.',
+                resourceType: 'DOCUMENT',
+                subject: 'Organization Flow',
+                className: 'Governance',
+                fileUrl: '/uploads/org-governance.pdf',
+                fileSize: 3100000,
+                uploadedById: adminUser.id,
+                organizationId: defaultOrg.id,
+              },
+              {
+                title: 'AI Proctoring & Integrity Engine Whitepaper',
+                description: 'Technical specs on LLM evaluation pipelines, anti-plagiarism checks, and Bloom taxonomy classifiers.',
+                resourceType: 'DOCUMENT',
+                subject: 'Security Docs',
+                className: 'Research',
+                fileUrl: '/uploads/ai-integrity-whitepaper.pdf',
+                fileSize: 4200000,
+                uploadedById: adminUser.id,
+                organizationId: defaultOrg.id,
+              },
+            ],
+          });
         }
+      }
+
+      // Fetch real resources from database
+      const allResources = await prisma.libraryResource.findMany({
+        orderBy: { updatedAt: 'desc' },
+        include: {
+          organization: { select: { id: true, name: true, code: true } },
+          uploadedBy: { select: { id: true, firstName: true, lastName: true, email: true } },
+        },
       });
 
-      // Map AuditLogs into "Resource" activity for demonstration
-      let activities = [];
-      if (recentLogs.length > 0) {
-        activities = recentLogs.map((log, index) => {
-          let resourceName = 'System Update Docs';
-          let type = 'DOCUMENT';
-          let orgName = log.organization?.name || 'All Orgs';
-          
-          if (log.action.includes('USER')) {
-            resourceName = 'User Onboarding Video';
-            type = 'MEDIA';
-          } else if (log.action.includes('ORG')) {
-            resourceName = 'Org Architecture Guidelines';
-            type = 'DOCUMENT';
-          } else if (log.action.includes('SYSTEM')) {
-            resourceName = 'API Framework Scripts';
-            type = 'CODE';
-          }
+      const totalArticles = allResources.filter((r) => r.resourceType !== 'MEDIA' && r.resourceType !== 'VIDEO').length;
+      const trainingVideos = allResources.filter((r) => r.resourceType === 'MEDIA' || r.resourceType === 'VIDEO').length;
 
-          // Fallbacks for the exact mockup if it's the exact index
-          if (index === 0 && !log.action) { resourceName = 'Global Terms of Service v5'; type = 'DOCUMENT'; orgName = 'All Orgs'; }
-          if (index === 1 && !log.action) { resourceName = 'Vidya AI v3 Onboarding Video'; type = 'MEDIA'; orgName = 'North Am Group'; }
-          if (index === 2 && !log.action) { resourceName = 'LLM Prompting Framework'; type = 'CODE'; orgName = 'Internal Only'; }
+      // Group categories dynamically
+      const categoryMap: Record<string, number> = {};
+      allResources.forEach((r) => {
+        const cat = r.subject || 'General';
+        categoryMap[cat] = (categoryMap[cat] || 0) + 1;
+      });
 
-          return {
-            id: log.id,
-            resourceName,
-            category: log.action.includes('USER') ? 'User Training' : log.action.includes('ORG') ? 'Legal & Compliance' : 'Technical Docs',
-            type,
-            organization: orgName,
-            lastModified: log.createdAt
-          };
-        });
-      } else {
-        // Fallback exact mockup items if no logs exist
-        const now = new Date();
-        activities = [
-          {
-            id: '1',
-            resourceName: 'Global Terms of Service v5',
-            category: 'Legal & Compliance',
-            type: 'DOCUMENT',
-            organization: 'All Orgs',
-            lastModified: new Date(now.getTime() - 86400000)
-          },
-          {
-            id: '2',
-            resourceName: 'Vidya AI v3 Onboarding Video',
-            category: 'User Training',
-            type: 'MEDIA',
-            organization: 'North Am Group',
-            lastModified: new Date(now.getTime() - 86400000 * 3)
-          },
-          {
-            id: '3',
-            resourceName: 'LLM Prompting Framework',
-            category: 'Technical Docs',
-            type: 'CODE',
-            organization: 'Internal Only',
-            lastModified: new Date(now.getTime() - 86400000 * 7)
-          }
-        ];
-      }
+      const categories = Object.entries(categoryMap).map(([name, count]) => ({
+        name,
+        count,
+      }));
+
+      // Map real activities
+      const activities = allResources.map((r) => ({
+        id: r.id,
+        resourceName: r.title,
+        description: r.description || '',
+        category: r.subject || 'General',
+        type: r.resourceType || 'DOCUMENT',
+        organization: r.organization?.name || 'Global / All Orgs',
+        organizationId: r.organizationId,
+        fileUrl: r.fileUrl,
+        fileSize: r.fileSize || 0,
+        uploadedBy: r.uploadedBy ? `${r.uploadedBy.firstName} ${r.uploadedBy.lastName}` : 'Administrator',
+        lastModified: r.updatedAt.toISOString(),
+      }));
 
       res.json({
         success: true,
@@ -2627,11 +2671,108 @@ export class AdminController {
           totalArticles,
           trainingVideos,
           categories,
-          activities
-        }
+          activities,
+        },
       });
     } catch (err: any) {
       logger.error(`[Admin:getKnowledgeStats] ${err}`);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+
+  static async createKnowledgeResource(req: Request, res: Response) {
+    try {
+      if (req.user?.role !== 'SUPER_ADMIN' && req.user?.role !== 'ADMIN' && req.user?.role !== 'ORG_ADMIN') {
+        res.status(403).json({ success: false, error: 'Access denied.' });
+        return;
+      }
+
+      const { title, description, category, resourceType, organizationId, externalUrl } = req.body;
+      const file = req.file;
+
+      if (!title) {
+        res.status(400).json({ success: false, error: 'Resource title is required.' });
+        return;
+      }
+
+      let fileUrl = externalUrl || '';
+      let fileSize = 0;
+
+      if (file) {
+        fileUrl = `/uploads/${file.filename}`;
+        fileSize = file.size;
+      }
+
+      if (!fileUrl) {
+        fileUrl = '/uploads/document.pdf';
+      }
+
+      // Determine target org ID
+      let targetOrgId = organizationId || req.user?.activeOrganizationId || req.user?.organizationId;
+      if (!targetOrgId) {
+        const defaultOrg = await prisma.organization.findFirst();
+        targetOrgId = defaultOrg?.id;
+      }
+
+      if (!targetOrgId) {
+        res.status(400).json({ success: false, error: 'Target organization not found.' });
+        return;
+      }
+
+      const resource = await prisma.libraryResource.create({
+        data: {
+          title,
+          description: description || null,
+          subject: category || 'General',
+          resourceType: resourceType || (file?.mimetype?.startsWith('video/') ? 'MEDIA' : 'DOCUMENT'),
+          fileUrl,
+          fileSize,
+          uploadedById: req.user.id,
+          organizationId: targetOrgId,
+        },
+        include: {
+          organization: { select: { id: true, name: true } },
+        },
+      });
+
+      res.status(201).json({ success: true, data: resource });
+    } catch (err: any) {
+      logger.error(`[Admin:createKnowledgeResource] ${err}`);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+
+  static async deleteKnowledgeResource(req: Request, res: Response) {
+    try {
+      if (req.user?.role !== 'SUPER_ADMIN' && req.user?.role !== 'ADMIN' && req.user?.role !== 'ORG_ADMIN') {
+        res.status(403).json({ success: false, error: 'Access denied.' });
+        return;
+      }
+
+      const { id } = req.params;
+      const resource = await prisma.libraryResource.findUnique({ where: { id } });
+      if (!resource) {
+        res.status(404).json({ success: false, error: 'Resource not found.' });
+        return;
+      }
+
+      // Delete file from disk if local upload
+      if (resource.fileUrl && resource.fileUrl.startsWith('/uploads/')) {
+        const filePath = path.join(process.cwd(), resource.fileUrl);
+        if (fs.existsSync(filePath)) {
+          try {
+            fs.unlinkSync(filePath);
+          } catch (e) {
+            logger.warn(`Could not remove file at ${filePath}: ${e}`);
+          }
+        }
+      }
+
+      await prisma.libraryResource.delete({ where: { id } });
+
+      res.json({ success: true, message: 'Resource deleted successfully.' });
+    } catch (err: any) {
+      logger.error(`[Admin:deleteKnowledgeResource] ${err}`);
       res.status(500).json({ success: false, error: err.message });
     }
   }

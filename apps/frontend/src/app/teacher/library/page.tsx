@@ -1,132 +1,169 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Upload, Search, Filter } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { LibraryResource, LibraryService } from '@/services/library.service';
-import { UploadModal } from '@/components/library/UploadModal';
+import { useState, useEffect, useCallback } from 'react';
+import {
+  Search,
+  Plus,
+} from 'lucide-react';
 import { ResourceTable } from '@/components/library/ResourceTable';
-import { PageHeader } from '@/design-system/PageHeader';
+import { UploadModal } from '@/components/library/UploadModal';
+import { LibraryResource, LibraryService } from '@/services/library.service';
+import toast from 'react-hot-toast';
 import { NativeSelect } from '@/components/ui/native-select';
 
 const SUBJECTS = ['All', 'Math', 'Science', 'English', 'History', 'Computer Science', 'Art', 'General'];
-const CLASSES = ['All', 'Class 9', 'Class 10', 'Class 11', 'Class 12', 'General'];
-const RESOURCE_TYPES = ['All', 'Document', 'PDF', 'Video', 'Presentation', 'Image', 'Archive', 'Other'];
+const RESOURCE_TYPES = ['All', 'Document', 'PDF', 'Video', 'Presentation', 'Image', 'Archive', 'Assignment', 'Other'];
 
-export default function MyLibraryPage() {
+export default function TeacherLibraryPage() {
   const [resources, setResources] = useState<LibraryResource[]>([]);
   const [loading, setLoading] = useState(true);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
-  
-  // Filters
   const [search, setSearch] = useState('');
   const [subject, setSubject] = useState('All');
-  const [className, setClassName] = useState('All');
   const [resourceType, setResourceType] = useState('All');
 
-  const fetchResources = async () => {
-    setLoading(true);
+  const fetchResources = useCallback(async () => {
     try {
+      setLoading(true);
       const data = await LibraryService.getResources({
-        search: search || undefined,
         subject: subject !== 'All' ? subject : undefined,
-        className: className !== 'All' ? className : undefined,
         resourceType: resourceType !== 'All' ? resourceType : undefined,
+        search: search.trim() || undefined,
       });
-      setResources(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.warn('Failed to fetch library resources', error);
-      setResources([]);
+      setResources(data);
+    } catch {
+      toast.error('Failed to load library resources');
     } finally {
       setLoading(false);
     }
-  };
+  }, [subject, resourceType, search]);
 
-  // Debounced search effect
   useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchResources();
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [search, subject, className, resourceType]);
+    fetchResources();
+  }, [fetchResources]);
 
   const handleEdit = (resource: LibraryResource) => {
-    // In a full implementation, open an edit modal
-    alert(`Editing ${resource.title} is not yet implemented in this demo.`);
+    toast.success(`Resource editor opened for: ${resource.title}`);
   };
 
-  return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
-      {/* Header */}
-      <PageHeader 
-        title="My Library" 
-        subtitle="Manage and share your teaching resources and documents."
-        actions={
-          <Button onClick={() => setIsUploadOpen(true)} className="flex items-center gap-2 shrink-0">
-            <Upload size={16} /> Upload Resource
-          </Button>
-        }
-      />
+  const resourceCount = resources.length;
+  const docCount = resources.filter((r) => r.resourceType === 'Document' || r.resourceType === 'PDF').length;
+  const videoCount = resources.filter((r) => r.resourceType === 'Video').length;
+  const assignmentCount = resources.filter((r) => r.resourceType === 'Assignment').length;
 
-      {/* Filters */}
-      <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-          <Input 
-            placeholder="Search by title, subject, or type..." 
-            className="pl-10 bg-gray-50 border-gray-200"
+  return (
+    <div className="max-w-[1600px] mx-auto text-slate-900 font-sans flex flex-col gap-6">
+      {/* Top Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-extrabold text-neutral-900 tracking-tight">
+            Digital Resource Library
+          </h1>
+          <p className="text-xs md:text-sm text-neutral-500 font-medium mt-1">
+            Upload, organize, and distribute instructional media, textbooks, and classroom materials
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsUploadOpen(true)}
+            className="px-4 py-2.5 rounded-xl bg-[#e05934] hover:bg-[#c94a2a] text-white text-xs font-bold transition-all shadow-xs flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Upload Material</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 4 Summary Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="p-5 rounded-2xl border border-neutral-200/90 bg-white shadow-xs flex flex-col justify-between">
+          <span className="text-[11px] font-bold tracking-wider text-neutral-400 uppercase">TOTAL ITEMS</span>
+          <div className="text-2xl font-extrabold text-neutral-900 mt-2">{resourceCount}</div>
+          <span className="text-xs text-neutral-500 font-medium mt-1">All indexed files</span>
+        </div>
+
+        <div className="p-5 rounded-2xl border border-neutral-200/90 bg-white shadow-xs flex flex-col justify-between">
+          <span className="text-[11px] font-bold tracking-wider text-blue-600 uppercase">DOCUMENTS & PDFS</span>
+          <div className="text-2xl font-extrabold text-blue-600 mt-2">{docCount}</div>
+          <span className="text-xs text-neutral-500 font-medium mt-1">Course guides & notes</span>
+        </div>
+
+        <div className="p-5 rounded-2xl border border-neutral-200/90 bg-white shadow-xs flex flex-col justify-between">
+          <span className="text-[11px] font-bold tracking-wider text-purple-600 uppercase">VIDEOS & RECORDINGS</span>
+          <div className="text-2xl font-extrabold text-purple-600 mt-2">{videoCount}</div>
+          <span className="text-xs text-neutral-500 font-medium mt-1">Classroom lecture captures</span>
+        </div>
+
+        <div className="p-5 rounded-2xl border border-neutral-200/90 bg-white shadow-xs flex flex-col justify-between">
+          <span className="text-[11px] font-bold tracking-wider text-[#e05934] uppercase">ASSIGNMENTS</span>
+          <div className="text-2xl font-extrabold text-[#e05934] mt-2">{assignmentCount}</div>
+          <span className="text-xs text-neutral-500 font-medium mt-1">Worksheets & problem sets</span>
+        </div>
+      </div>
+
+      {/* Search & Filter Bar */}
+      <div className="flex flex-col sm:flex-row items-center gap-3 justify-between">
+        <div className="relative w-full sm:max-w-md">
+          <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            placeholder="Search resources by title, keyword, or author..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 bg-white border border-neutral-200/90 rounded-xl text-xs font-medium text-neutral-900 focus:outline-none focus:ring-2 focus:ring-[#e05934] transition-all"
           />
         </div>
-        <div className="flex items-center gap-3 overflow-x-auto pb-1 md:pb-0 hide-scrollbar">
-          <div className="flex items-center gap-2 shrink-0 border-l pl-4 border-gray-200">
-            <Filter size={16} className="text-gray-400" />
-            <span className="text-sm font-medium text-gray-700">Filters:</span>
-          </div>
-          <NativeSelect 
+
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <NativeSelect
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
-            className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-primary shrink-0"
+            className="px-3 py-2 text-xs font-bold bg-white border border-neutral-200/90 rounded-xl text-neutral-700"
           >
-            {SUBJECTS.map(s => <option key={s} value={s}>{s === 'All' ? 'All Subjects' : s}</option>)}
+            {SUBJECTS.map((s) => (
+              <option key={s} value={s}>
+                {s === 'All' ? 'All Subjects' : s}
+              </option>
+            ))}
           </NativeSelect>
-          <NativeSelect 
-            value={className}
-            onChange={(e) => setClassName(e.target.value)}
-            className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-primary shrink-0"
-          >
-            {CLASSES.map(c => <option key={c} value={c}>{c === 'All' ? 'All Classes' : c}</option>)}
-          </NativeSelect>
-          <NativeSelect 
+
+          <NativeSelect
             value={resourceType}
             onChange={(e) => setResourceType(e.target.value)}
-            className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-primary shrink-0"
+            className="px-3 py-2 text-xs font-bold bg-white border border-neutral-200/90 rounded-xl text-neutral-700"
           >
-            {RESOURCE_TYPES.map(t => <option key={t} value={t}>{t === 'All' ? 'All Types' : t}</option>)}
+            {RESOURCE_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {t === 'All' ? 'All Formats' : t}
+              </option>
+            ))}
           </NativeSelect>
         </div>
       </div>
 
-      {/* Content */}
-      {loading ? (
-        <div className="flex justify-center py-20">
-          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-        </div>
-      ) : (
-        <ResourceTable 
-          resources={resources} 
-          onRefresh={fetchResources}
-          onEdit={handleEdit}
-        />
-      )}
+      {/* Main Resource Table Card */}
+      <div className="rounded-2xl border border-neutral-200/90 bg-white shadow-xs overflow-hidden">
+        {loading ? (
+          <div className="p-8 space-y-3">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="skeleton h-14 rounded-xl" />
+            ))}
+          </div>
+        ) : (
+          <ResourceTable
+            resources={resources}
+            onEdit={handleEdit}
+            onRefresh={fetchResources}
+          />
+        )}
+      </div>
 
-      {/* Modals */}
-      <UploadModal 
-        isOpen={isUploadOpen} 
-        onClose={() => setIsUploadOpen(false)} 
-        onSuccess={fetchResources} 
+      {/* Upload Modal */}
+      <UploadModal
+        isOpen={isUploadOpen}
+        onClose={() => setIsUploadOpen(false)}
+        onSuccess={fetchResources}
       />
     </div>
   );

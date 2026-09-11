@@ -14,6 +14,10 @@ import {
   Search,
   PanelLeftClose,
   PanelLeftOpen,
+  Smartphone,
+  Target,
+  CheckSquare,
+  History,
 } from 'lucide-react';
 import { useSidebarStore } from '@/store/sidebar.store';
 import { useAuthStore } from '@/store/auth.store';
@@ -40,6 +44,12 @@ const NAV_SECTIONS: NavSectionConfig[] = [
     items: [
       { href: '/faculty', label: 'Dashboard', icon: LayoutGrid, exact: true },
       {
+        href: '/ai-toolkit',
+        label: "AI Teacher's Toolkit",
+        icon: Smartphone,
+        badge: { text: 'AI', variant: 'neutral' },
+      },
+      {
         href: '/generate',
         label: 'AI Generator',
         icon: Sparkles,
@@ -52,6 +62,9 @@ const NAV_SECTIONS: NavSectionConfig[] = [
     title: 'ACADEMICS',
     items: [
       { href: '/teacher/groups', label: 'My Classes', icon: BookOpen },
+      { href: '/teacher/obe', label: 'Curriculum & OBE', icon: Target },
+      { href: '/grader', label: 'Evaluations', icon: CheckSquare },
+      { href: '/teacher/library', label: 'Resource Library', icon: History },
       { href: '/teacher', label: 'Teachers Directory', icon: Users },
     ],
   },

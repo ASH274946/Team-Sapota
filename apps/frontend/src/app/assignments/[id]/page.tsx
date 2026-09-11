@@ -552,13 +552,13 @@ export default function AssignmentDetailPage({ params }: { params: Promise<{ id:
                         onClick={async () => {
                           setDownloading(true);
                           try {
-                            const res = await fetch(`http://localhost:3001/api/v1/papers/${assignment.id}/pdf`);
-                            if (!res.ok) throw new Error('PDF not available');
-                            const blob = await res.blob();
+                            const res = await api.get(`/papers/${assignment.id}/pdf`, { responseType: 'blob' });
+                            if (!res.data) throw new Error('PDF not available');
+                            const blob = new Blob([res.data], { type: 'application/pdf' });
                             const url = URL.createObjectURL(blob);
                             const a = document.createElement('a');
                             a.href = url;
-                            a.download = `paper-${assignment.id}.pdf`;
+                            a.download = `paper-${(assignment.title || assignment.id).replace(/\s+/g, '_')}.pdf`;
                             document.body.appendChild(a);
                             a.click();
                             document.body.removeChild(a);

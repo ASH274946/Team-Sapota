@@ -1,185 +1,255 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import toast from 'react-hot-toast';
 import { motion } from 'framer-motion';
 import {
-  FileText, Search, Clock, ChevronRight, PlayCircle, Loader2, Sparkles, BookOpen,
-  Filter, MoreVertical, Zap, Microscope, Calculator, Code
+  FileText,
+  Search,
+  Clock,
+  ChevronRight,
+  Plus,
+  Star,
+  AlertCircle,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import type { Assignment } from '@/types/assignment.types';
 
-// Icons based on subject
-const getSubjectIcon = (subject: string) => {
-  const s = subject.toLowerCase();
-  if (s.includes('physic') || s.includes('electric')) return <Zap size={20} color="#374151" />;
-  if (s.includes('bio') || s.includes('chem')) return <Microscope size={20} color="#374151" />;
-  if (s.includes('math') || s.includes('calc')) return <Calculator size={20} color="#374151" />;
-  if (s.includes('code') || s.includes('comp')) return <Code size={20} color="#374151" />;
-  return <BookOpen size={20} color="#374151" />;
+const STATUS_BADGES: Record<string, string> = {
+  PUBLISHED: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  ACTIVE: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  COMPLETED: 'bg-blue-50 text-blue-700 border-blue-200',
+  PENDING_APPROVAL: 'bg-amber-50 text-amber-700 border-amber-200',
+  APPROVED: 'bg-purple-50 text-purple-700 border-purple-200',
+  DRAFT: 'bg-neutral-100 text-neutral-700 border-neutral-200',
+  REJECTED: 'bg-rose-50 text-rose-700 border-rose-200',
 };
 
-function StudentView({ assignments, loading, error, fetchAssignments }: any) {
-  const [search, setSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<'To Do' | 'In Progress' | 'Submitted'>('To Do');
+export default function AssignmentsPage() {
   const router = useRouter();
+  const { user } = useAuthStore();
+  const isStudent = user?.role === 'STUDENT';
 
-  const filtered = assignments.filter((a: any) => {
-    const matchesSearch = a.title.toLowerCase().includes(search.toLowerCase()) ||
-                          a.subject.toLowerCase().includes(search.toLowerCase());
-    
-    const cat = a.dashboardCategory;
-    let matchesTab = false;
-    if (activeTab === 'To Do') {
-      matchesTab = cat === 'UPCOMING' || cat === 'MISSED' || cat === undefined; // fallback
-    } else if (activeTab === 'In Progress') {
-      matchesTab = cat === 'LIVE NOW';
-    } else if (activeTab === 'Submitted') {
-      matchesTab = cat === 'COMPLETED';
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
+
+  const fetchAssignments = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await api.get('/assignments?limit=100');
+      const list: Assignment[] = Array.isArray(res.data?.data)
+        ? res.data.data
+        : Array.isArray((res.data as any)?.data?.assignments)
+        ? (res.data as any).data.assignments
+        : Array.isArray(res.data)
+        ? (res.data as any)
+        : [];
+      setAssignments(list);
+    } catch (err: any) {
+      setError(err?.response?.data?.error || err?.message || 'Failed to load assignments');
+    } finally {
+      setLoading(false);
     }
+  }, []);
 
-    // fallback for old api that doesnt return dashboardCategory
-    if (!cat) {
-       const status = a.status || a.attemptStatus || 'AVAILABLE';
-       if (activeTab === 'To Do' && status === 'AVAILABLE') matchesTab = true;
-       if (activeTab === 'In Progress' && (status === 'STARTED' || status === 'IN_PROGRESS')) matchesTab = true;
-       if (activeTab === 'Submitted' && ['SUBMITTED', 'GRADED', 'RESULT_PUBLISHED', 'UNDER_REVIEW'].includes(status)) matchesTab = true;
+  useEffect(() => {
+    if (isStudent) {
+      router.replace('/student/assessments');
+      return;
     }
+    fetchAssignments();
+  }, [isStudent, router, fetchAssignments]);
 
-    return matchesSearch && matchesTab;
-  });
+  const filtered = useMemo(() => {
+    return assignments.filter((a) => {
+      const matchesSearch =
+        a.title.toLowerCase().includes(search.toLowerCase()) ||
+        a.subject.toLowerCase().includes(search.toLowerCase());
+      const matchesStatus =
+        selectedStatus === 'ALL' || a.status.toUpperCase() === selectedStatus.toUpperCase();
+      return matchesSearch && matchesStatus;
+    });
+  }, [assignments, search, selectedStatus]);
+
+  if (loading) {
+    return (
+      <div className="max-w-[1600px] mx-auto p-4 md:p-6 flex flex-col gap-6 text-slate-900 font-sans">
+        <div className="flex flex-col gap-2">
+          <div className="skeleton h-8 w-64 rounded-xl" />
+          <div className="skeleton h-4 w-96 rounded-lg" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="skeleton h-44 rounded-2xl" />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div style={{ padding: '24px', background: '#F8F9FA', minHeight: '100vh', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-      
-      {/* Header */}
-      <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '24px', fontWeight: 700, color: '#111827', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div style={{ width: '8px', height: '8px', background: '#22C55E', borderRadius: '50%' }} />
-          Assignments
-        </h1>
-        <p style={{ color: '#6B7280', margin: 0, fontSize: '14px' }}>
-          Manage and track your educational progress through various modules.
-        </p>
-      </div>
+    <div className="max-w-[1600px] mx-auto text-slate-900 font-sans flex flex-col gap-6">
+      {/* Top Greeting & Action Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-extrabold text-neutral-900 tracking-tight">
+            Assignment Management
+          </h1>
+          <p className="text-xs md:text-sm text-neutral-500 font-medium mt-1">
+            Author, review, publish, and monitor question papers and exams across all sections
+          </p>
+        </div>
 
-      {/* Search Bar */}
-      <div style={{ 
-        background: '#fff', borderRadius: '9999px', padding: '8px', 
-        display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '32px',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.05)', maxWidth: '600px'
-      }}>
-        <button style={{ 
-          background: 'transparent', color: '#6B7280', padding: '8px 16px', borderRadius: '9999px', 
-          display: 'flex', alignItems: 'center', gap: '8px', border: 'none', cursor: 'pointer',
-          fontWeight: 500, fontSize: '14px', borderRight: '1px solid #E5E7EB'
-        }}>
-          <Filter size={16} /> Filter By
-        </button>
-        <div style={{ display: 'flex', alignItems: 'center', flex: 1, gap: '8px' }}>
-          <Search size={18} color="#9CA3AF" />
-          <input
-            type="text"
-            placeholder="Search Assignment"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={{ border: 'none', outline: 'none', width: '100%', fontSize: '14px', color: '#111827' }}
-          />
+        <div className="flex items-center gap-3">
+          <Link
+            href="/assignments/create"
+            className="px-4 py-2.5 rounded-xl bg-[#e05934] hover:bg-[#c94a2a] text-white text-xs font-bold transition-all shadow-xs flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Create New Assignment</span>
+          </Link>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
-        {['To Do', 'In Progress', 'Submitted'].map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab as any)}
-            style={{
-              padding: '8px 20px',
-              borderRadius: '9999px',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: '14px',
-              fontWeight: 500,
-              background: activeTab === tab ? '#000' : '#F3F4F6',
-              color: activeTab === tab ? '#fff' : '#6B7280',
-              transition: 'all 0.2s'
-            }}
+      {/* Metrics Bar */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        {[
+          { label: 'ALL ASSIGNMENTS', value: assignments.length, color: 'text-neutral-900' },
+          {
+            label: 'PUBLISHED & ACTIVE',
+            value: assignments.filter((a) => ['PUBLISHED', 'ACTIVE'].includes(a.status)).length,
+            color: 'text-emerald-600',
+          },
+          {
+            label: 'PENDING APPROVAL',
+            value: assignments.filter((a) => a.status === 'PENDING_APPROVAL').length,
+            color: 'text-amber-600',
+          },
+          {
+            label: 'DRAFTS',
+            value: assignments.filter((a) => a.status === 'DRAFT').length,
+            color: 'text-purple-600',
+          },
+        ].map((stat) => (
+          <div
+            key={stat.label}
+            className="p-5 rounded-2xl border border-neutral-200/90 bg-white shadow-xs flex flex-col justify-between"
           >
-            {tab}
-          </button>
+            <span className="text-[11px] font-bold tracking-wider text-neutral-400 uppercase">{stat.label}</span>
+            <div className={`text-2xl font-extrabold mt-2 ${stat.color}`}>{stat.value}</div>
+          </div>
         ))}
       </div>
 
-      {/* Content */}
-      {loading ? (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '300px' }}>
-          <Loader2 size={32} color="#000" className="animate-spin" />
+      {/* Search & Filter Bar */}
+      <div className="flex flex-col sm:flex-row items-center gap-3 justify-between">
+        <div className="relative w-full sm:max-w-md">
+          <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            placeholder="Search by title, subject, or class..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 bg-white border border-neutral-200/90 rounded-xl text-xs font-medium text-neutral-900 focus:outline-none focus:ring-2 focus:ring-[#e05934] transition-all"
+          />
         </div>
-      ) : error ? (
-        <div style={{ padding: 20, background: '#fee2e2', borderRadius: 12, color: '#991b1b' }}>{error}</div>
+
+        <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
+          {['ALL', 'PUBLISHED', 'PENDING_APPROVAL', 'APPROVED', 'DRAFT'].map((status) => (
+            <button
+              key={status}
+              onClick={() => setSelectedStatus(status)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                selectedStatus === status
+                  ? 'bg-neutral-900 text-white shadow-2xs'
+                  : 'bg-white border border-neutral-200/90 text-neutral-600 hover:bg-neutral-50'
+              }`}
+            >
+              {status.replace('_', ' ')}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Main Grid */}
+      {error ? (
+        <div className="p-8 rounded-2xl bg-rose-50 border border-rose-200 text-center text-rose-800">
+          <AlertCircle className="w-8 h-8 text-rose-500 mx-auto mb-2" />
+          <h3 className="text-sm font-bold">Failed to load assignments</h3>
+          <p className="text-xs mt-1">{error}</p>
+        </div>
       ) : filtered.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '64px', color: '#6B7280' }}>
-          No assignments found in this tab.
+        <div className="p-12 text-center rounded-2xl bg-white border border-neutral-200/90 shadow-xs flex flex-col items-center">
+          <FileText className="w-10 h-10 text-neutral-300 mb-3" />
+          <h3 className="text-base font-bold text-neutral-800">No Assignments Found</h3>
+          <p className="text-xs text-neutral-400 mt-1 max-w-sm">
+            {search || selectedStatus !== 'ALL'
+              ? 'No assignments match the active search or filter criteria.'
+              : 'Create your first assessment paper using AI question generation.'}
+          </p>
+          <Link
+            href="/assignments/create"
+            className="mt-5 px-5 py-2.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-bold transition-all flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Create Assignment</span>
+          </Link>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '24px' }}>
-          {filtered.map((a: any, idx: number) => {
-            const assignDateStr = new Date(a.createdAt || a.dueDate).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-');
-            const dueDateStr = new Date(a.dueDate).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-');
-            
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {filtered.map((assignment, idx) => {
+            const badgeCls = STATUS_BADGES[assignment.status] || 'bg-neutral-100 text-neutral-800 border-neutral-200';
             return (
               <motion.div
-                initial={{ opacity: 0, y: 15 }}
+                key={assignment.id}
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: idx * 0.05 }}
-                key={a.id}
-                onClick={() => router.push(`/assignments/${a.id}`)}
-                style={{
-                  background: '#fff',
-                  borderRadius: '20px',
-                  padding: '24px',
-                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  transition: 'transform 0.2s',
-                  position: 'relative'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-4px)'}
-                onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
+                transition={{ delay: idx * 0.03 }}
+                className="rounded-2xl border border-neutral-200/90 bg-white p-5 shadow-xs hover:border-neutral-300 hover:shadow-sm transition-all flex flex-col justify-between gap-4"
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
-                  <div style={{ width: '40px', height: '40px', background: '#F3F4F6', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {getSubjectIcon(a.subject)}
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-3">
+                    <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-orange-50 text-[#e05934] border border-orange-100">
+                      {assignment.subject}
+                    </span>
+                    <span className={`text-[11px] font-extrabold uppercase px-2.5 py-0.5 rounded-full border ${badgeCls}`}>
+                      {assignment.status.replace('_', ' ')}
+                    </span>
                   </div>
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); /* Handle menu */ }}
-                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px', color: '#6B7280' }}
-                  >
-                    <MoreVertical size={20} />
-                  </button>
+
+                  <h3 className="text-base font-bold text-neutral-900 leading-snug line-clamp-2">
+                    {assignment.title}
+                  </h3>
+                  <p className="text-xs text-neutral-500 line-clamp-2 mt-1.5 font-medium">
+                    {assignment.description || `Assessment paper covering key curriculum topics in ${assignment.subject}.`}
+                  </p>
                 </div>
 
-                <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#111827', margin: '0 0 12px 0' }}>{a.title}</h3>
-                
-                <p style={{ color: '#6B7280', fontSize: '13px', lineHeight: 1.5, margin: '0 0 24px 0', flex: 1 }}>
-                  {a.description || a.subject || 'Detailed analysis and fundamental principles.'}
-                </p>
+                <div className="pt-3 border-t border-neutral-100 flex items-center justify-between text-xs text-neutral-500 font-medium">
+                  <div className="flex items-center gap-3">
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5 text-neutral-400" />
+                      <span>{assignment.duration}m</span>
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Star className="w-3.5 h-3.5 text-amber-500" />
+                      <span>{assignment.totalMarks} Marks</span>
+                    </span>
+                  </div>
 
-                <div style={{ borderTop: '1px solid #F3F4F6', paddingTop: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                  <div>
-                    <div style={{ fontSize: '11px', color: '#6B7280', marginBottom: '4px' }}>Assigned on</div>
-                    <div style={{ fontSize: '13px', fontWeight: 600, color: '#111827' }}>{assignDateStr}</div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: '11px', color: '#6B7280', marginBottom: '4px' }}>Due</div>
-                    <div style={{ fontSize: '13px', fontWeight: 600, color: '#DC2626' }}>{dueDateStr}</div>
-                  </div>
+                  <Link
+                    href={`/assignments/${assignment.id}`}
+                    className="text-xs font-bold text-[#e05934] hover:underline flex items-center gap-1"
+                  >
+                    <span>Details</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </Link>
                 </div>
               </motion.div>
             );
@@ -188,220 +258,4 @@ function StudentView({ assignments, loading, error, fetchAssignments }: any) {
       )}
     </div>
   );
-}
-
-function TeacherView({ assignments, loading, error, search, setSearch }: any) {
-  const filtered = assignments.filter((a: any) => {
-    return a.title.toLowerCase().includes(search.toLowerCase()) ||
-           a.subject.toLowerCase().includes(search.toLowerCase());
-  });
-
-  return (
-    <div style={{ padding: 'var(--page-pad)', maxWidth: 'var(--page-max-w)', margin: '0 auto', width: '100%' }}>
-      {/* Premium Header */}
-      <div style={{
-        position: 'relative',
-        background: 'linear-gradient(135deg, #F97316 0%, #E8531D 50%, #C2410C 100%)',
-        padding: '16px 24px',
-        marginBottom: 20,
-        boxShadow: '0 4px 12px rgba(249, 115, 22, 0.2)',
-        borderRadius: 16
-      }}>
-        {/* Abstract background blobs */}
-        <div style={{
-          position: 'absolute', top: '-20%', right: '-5%', width: '40%', height: '150%',
-          background: 'radial-gradient(ellipse at center, rgba(255, 255, 255, 0.15) 0%, rgba(255,255,255,0) 70%)',
-          pointerEvents: 'none'
-        }} />
-        <div style={{
-          position: 'absolute', bottom: '-20%', left: '10%', width: '30%', height: '100%',
-          background: 'radial-gradient(ellipse at center, rgba(255, 255, 255, 0.1) 0%, rgba(255,255,255,0) 70%)',
-          pointerEvents: 'none'
-        }} />
-        
-        <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexWrap: 'wrap', gap: 24, justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: 'rgba(255, 255, 255, 0.15)', borderRadius: 8, color: 'rgba(255,255,255,0.95)', fontSize: 12, fontWeight: 700 }}>
-              <Sparkles size={12} /> My Assignments
-            </div>
-            <h1 style={{ fontSize: 18, fontWeight: 700, color: '#ffffff', margin: 0, letterSpacing: '-0.01em' }}>
-              Assignment Management
-            </h1>
-          </div>
-          <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.9)', margin: 0, opacity: 0.9 }}>
-            Create and track assignments for your classes.
-          </p>
-        </div>
-      </div>
-
-      {/* Search and Filters */}
-      <div style={{ display: 'flex', gap: 16, marginBottom: 24, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ position: 'relative', flex: 1, minWidth: 280 }}>
-          <Search size={18} style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: '#9CA3AF' }} />
-          <input
-            type="text"
-            placeholder="Search by title or subject..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '10px 14px 10px 40px',
-              borderRadius: 12,
-              border: '1px solid var(--border)',
-              background: '#ffffff',
-              fontSize: 15,
-              fontWeight: 500,
-              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
-              outline: 'none',
-              transition: 'all 0.2s ease'
-            }}
-          />
-        </div>
-        <Link
-          href="/assignments/create"
-          className="btn btn-primary"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '10px 20px',
-            borderRadius: 12,
-            fontWeight: 700,
-            textDecoration: 'none',
-            flexShrink: 0,
-          }}
-        >
-          <Sparkles size={16} /> Create Assignment
-        </Link>
-      </div>
-
-      {loading ? (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '64px 0' }}>
-          <Loader2 size={32} color="var(--brand)" className="animate-spin" style={{ marginBottom: 16 }} />
-        </div>
-      ) : error ? (
-        <div className="card" style={{ textAlign: 'center', padding: '64px 24px', background: '#FEF2F2', borderColor: '#FECACA' }}>
-          <p style={{ color: '#DC2626' }}>{error}</p>
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="card" style={{ textAlign: 'center', padding: '40px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', borderRadius: 16 }}>
-          <BookOpen size={24} color="#9CA3AF" />
-          <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: '12px 0 16px' }}>No assignments found.</p>
-          <Link href="/assignments/create" className="btn btn-primary btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <Sparkles size={14} /> Create Assignment
-          </Link>
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 24 }}>
-          {filtered.map((assignment: any, idx: number) => (
-            <motion.div
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: idx * 0.05 }}
-              key={assignment.id}
-            >
-              <Link href={`/assignments/${assignment.id}`} style={{ display: 'block', textDecoration: 'none' }}>
-                <div 
-                  className="card"
-                  style={{
-                    padding: 24,
-                    height: '100%',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                    cursor: 'pointer',
-                    transition: 'all 0.3s ease',
-                    border: '1px solid var(--border)',
-                  }}
-                >
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-                      <span style={{
-                        display: 'inline-block',
-                        padding: '4px 10px',
-                        background: '#EEF2FF',
-                        color: '#4338CA',
-                        borderRadius: 8,
-                        fontSize: 12,
-                        fontWeight: 700,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.05em'
-                      }}>
-                        {assignment.subject}
-                      </span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#6B7280', fontSize: 13, fontWeight: 700, background: '#F3F4F6', padding: '4px 8px', borderRadius: 8 }}>
-                        {assignment.status}
-                      </div>
-                    </div>
-                    
-                    <h3 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 8, lineHeight: 1.3 }}>
-                      {assignment.title}
-                    </h3>
-                    
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 24 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-secondary)' }}>
-                        <Clock size={16} color="#6366F1" />
-                        <span style={{ fontSize: 14, fontWeight: 600 }}>{assignment.duration} mins</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-secondary)' }}>
-                        <FileText size={16} color="#F59E0B" />
-                        <span style={{ fontSize: 14, fontWeight: 600 }}>{assignment.totalMarks} Marks</span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: 'var(--brand)', fontWeight: 700, fontSize: 14 }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <PlayCircle size={18} /> View Details
-                    </span>
-                    <ChevronRight size={18} />
-                  </div>
-                </div>
-              </Link>
-            </motion.div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-export default function AssignmentsPage() {
-  const { user } = useAuthStore();
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
-
-  const fetchAssignments = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const isTeacher = user?.role === 'TEACHER' || user?.role === 'FACULTY' || user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN';
-      const endpoint = isTeacher ? '/assignments' : '/student/assessments';
-      const res = await api.get<{ success: boolean; data: any[] }>(endpoint);
-      
-      const mappedAssignments = res.data.data?.map(a => ({
-        ...a,
-        status: isTeacher ? a.status : (a.attemptStatus || 'AVAILABLE'),
-      })) || [];
-      
-      setAssignments(mappedAssignments as unknown as Assignment[]);
-    } catch (err: any) {
-      setError(err.message || 'Failed to load assignments');
-      toast.error('Failed to load assignments');
-    } finally {
-      setLoading(false);
-    }
-  }, [user]);
-
-  useEffect(() => { fetchAssignments(); }, [fetchAssignments]);
-
-  const isTeacher = user?.role === 'TEACHER' || user?.role === 'FACULTY' || user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN';
-
-  if (isTeacher) {
-    return <TeacherView assignments={assignments} loading={loading} error={error} search={search} setSearch={setSearch} />;
-  }
-
-  return <StudentView assignments={assignments} loading={loading} error={error} fetchAssignments={fetchAssignments} />;
 }

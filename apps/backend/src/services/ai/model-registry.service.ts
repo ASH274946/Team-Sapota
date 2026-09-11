@@ -41,10 +41,10 @@ export const ModelRegistry: Record<string, ModelConfig> = {
 export class ModelRegistryService {
   static getModelForIntent(intent: string): ModelConfig {
     // Basic routing logic
-    if (intent === 'GenerateQuestionPaper' || intent === 'EvaluateTypedAnswer' || intent === 'GenerateQuestionExplanation') {
+    if (intent === 'GenerateQuestionPaper' || intent === 'EvaluateTypedAnswer') {
       return ModelRegistry['llama-3.1-70b-instruct']; // Needs deep reasoning, use NVIDIA
     }
-    return ModelRegistry['gpt-oss-120b']; // Fast fallback, use Groq
+    return ModelRegistry['gpt-oss-120b']; // Fast low-latency generation, use Groq (gpt-oss-120b)
   }
 }
 

@@ -16,6 +16,7 @@ router.use(requireRole('STUDENT'));
 router.get('/dashboard', asyncHandler(StudentController.getDashboard));
 router.get('/stats', asyncHandler(StudentController.getStats));
 router.get('/lessons', asyncHandler(StudentController.getMyLessons));
+router.get('/lessons/:id', asyncHandler(StudentController.getLessonDetail));
 router.get('/assessments', asyncHandler(StudentController.getMyAssessments));
 router.get('/assessments/upcoming', asyncHandler(StudentController.getUpcomingAssessments));
 router.post('/assessments/:id/start', asyncHandler(StudentController.startAssessment));

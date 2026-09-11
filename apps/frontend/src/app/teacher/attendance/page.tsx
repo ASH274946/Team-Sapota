@@ -1,12 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { PageHeader } from '@/design-system/PageHeader';
-import { Card } from '@/design-system/Card';
-import { Button } from '@/design-system/Button';
-import { Check, X, Calendar as CalendarIcon, Users, Clock, HelpCircle, Lock, CheckCircle2 } from 'lucide-react';
+import { motion } from 'framer-motion';
+import {
+  Calendar as CalendarIcon,
+  Users,
+  Lock,
+  Save,
+} from 'lucide-react';
 import { useAttendance, AttendanceStatus } from '@/hooks/useAttendance';
-import { NativeSelect } from '@/components/ui/native-select';
 
 export default function AttendancePage() {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -19,19 +21,16 @@ export default function AttendancePage() {
     isLocked,
     setStatus,
     setAllStatus,
-    saveAttendance
+    saveAttendance,
   } = useAttendance(date);
 
   const handleSaveClick = () => {
     if (isLocked) return;
-    
-    // Check if any students are left unmarked
-    const unrecorded = students.filter(s => s.status === 'NONE').length;
+    const unrecorded = students.filter((s) => s.status === 'NONE').length;
     if (unrecorded > 0) {
-      saveAttendance(subject); // This will trigger the toast error inside the hook
+      saveAttendance(subject);
       return;
     }
-    
     setShowConfirm(true);
   };
 
@@ -40,254 +39,198 @@ export default function AttendancePage() {
     await saveAttendance(subject);
   };
 
-  const presentCount = students.filter(s => s.status === 'PRESENT').length;
-  const absentCount = students.filter(s => s.status === 'ABSENT').length;
-  const lateCount = students.filter(s => s.status === 'LATE').length;
-  const excusedCount = students.filter(s => s.status === 'EXCUSED').length;
-  const unrecordedCount = students.filter(s => s.status === 'NONE').length;
+  const presentCount = students.filter((s) => s.status === 'PRESENT').length;
+  const absentCount = students.filter((s) => s.status === 'ABSENT').length;
+  const lateCount = students.filter((s) => s.status === 'LATE').length;
+  const excusedCount = students.filter((s) => s.status === 'EXCUSED').length;
+  const unrecordedCount = students.filter((s) => s.status === 'NONE').length;
   const totalCount = students.length;
 
-  const attendanceRate = totalCount > 0 ? Math.round(((presentCount + lateCount + excusedCount) / totalCount) * 100) : 0;
+  const attendanceRate =
+    totalCount > 0
+      ? Math.round(((presentCount + lateCount + excusedCount) / totalCount) * 100)
+      : 0;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, position: 'relative' }}>
-      <PageHeader
-        title="Class Attendance"
-        subtitle="Record and manage daily or subject-specific attendance."
-      />
-
-      <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 24, alignItems: 'stretch' }}>
-        {/* Left Column: Configuration & Summary */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <Card padding="20px">
-            <h3 style={{ fontSize: 'var(--text-base)', fontWeight: 600, marginBottom: 16, color: 'var(--text-primary)' }}>
-              Configuration
-            </h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div>
-                <label style={{ display: 'block', fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
-                  Date
-                </label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--surface)' }}>
-                  <CalendarIcon size={16} color="var(--text-muted)" />
-                  <input
-                    type="date"
-                    value={date}
-                    onChange={e => setDate(e.target.value)}
-                    style={{ border: 'none', background: 'transparent', outline: 'none', width: '100%', color: 'var(--text-primary)', fontSize: 'var(--text-sm)' }}
-                  />
-                </div>
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
-                  Class / Subject
-                </label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--surface)' }}>
-                  <Users size={16} color="var(--text-muted)" />
-                  <NativeSelect
-                    value={subject}
-                    onChange={e => setSubject(e.target.value)}
-                    style={{ border: 'none', background: 'transparent', outline: 'none', width: '100%', color: 'var(--text-primary)', fontSize: 'var(--text-sm)' }}
-                  >
-                    <option value="Computer Science 101">Computer Science 101</option>
-                    <option value="Advanced Mathematics">Advanced Mathematics</option>
-                    <option value="Physics II">Physics II</option>
-                  </NativeSelect>
-                </div>
-              </div>
-            </div>
-          </Card>
-          
-          <Card padding="20px">
-            <h3 style={{ fontSize: 'var(--text-base)', fontWeight: 600, marginBottom: 16, color: 'var(--text-primary)' }}>
-              Summary
-            </h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 'var(--text-sm)' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>Total Students:</span>
-                <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{totalCount}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 'var(--text-sm)' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>Present:</span>
-                <span style={{ fontWeight: 600, color: '#10B981', background: '#ECFDF5', padding: '2px 8px', borderRadius: 12 }}>{presentCount}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 'var(--text-sm)' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>Absent:</span>
-                <span style={{ fontWeight: 600, color: '#EF4444', background: '#FEF2F2', padding: '2px 8px', borderRadius: 12 }}>{absentCount}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 'var(--text-sm)' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>Late:</span>
-                <span style={{ fontWeight: 600, color: '#F59E0B', background: '#FFFBEB', padding: '2px 8px', borderRadius: 12 }}>{lateCount}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 'var(--text-sm)' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>Excused:</span>
-                <span style={{ fontWeight: 600, color: '#3B82F6', background: '#EFF6FF', padding: '2px 8px', borderRadius: 12 }}>{excusedCount}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 'var(--text-sm)' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>Unrecorded:</span>
-                <span style={{ fontWeight: 600, color: '#6B7280', background: '#F3F4F6', padding: '2px 8px', borderRadius: 12 }}>{unrecordedCount}</span>
-              </div>
-              <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 'var(--text-sm)' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>Attendance Rate:</span>
-                <span style={{ fontWeight: 700, color: 'var(--brand)', fontSize: 'var(--text-base)' }}>{attendanceRate}%</span>
-              </div>
-            </div>
-          </Card>
-
-          {isLocked && (
-            <Card padding="20px" style={{ background: '#FEF2F2', border: '1px solid #FECACA' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, color: '#B91C1C' }}>
-                <Lock size={20} />
-                <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500, lineHeight: 1.4 }}>
-                  Attendance for this date has been finalized and can no longer be modified.
-                </div>
-              </div>
-            </Card>
-          )}
+    <div className="max-w-[1600px] mx-auto text-slate-900 font-sans flex flex-col gap-6">
+      {/* Top Greeting & Action Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-extrabold text-neutral-900 tracking-tight">
+            Class Attendance Register
+          </h1>
+          <p className="text-xs md:text-sm text-neutral-500 font-medium mt-1">
+            Record, mark, and synchronize daily or lecture-specific attendance
+          </p>
         </div>
 
-        {/* Right Column: Student List & Action Footer */}
-        <Card padding="24px" style={{ display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between' }}>
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-              <div>
-                <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--text-primary)' }}>Student List</h3>
-                <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginTop: 2 }}>
-                  Mark individual attendance or use bulk actions.
-                </p>
-              </div>
-              <div style={{ display: 'flex', gap: 12, opacity: isLocked ? 0.5 : 1, pointerEvents: isLocked ? 'none' : 'auto' }}>
-                <Button variant="outline" size="sm" onClick={() => setAllStatus('PRESENT')}>Mark All Present</Button>
-                <Button variant="outline" size="sm" onClick={() => setAllStatus('ABSENT')}>Mark All Absent</Button>
-              </div>
-            </div>
-
-            {loading ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {[1, 2, 3, 4, 5].map(i => (
-                  <div key={i} style={{ height: 64, background: 'var(--bg-muted)', borderRadius: 8, animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' }} />
-                ))}
-              </div>
-            ) : students.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-secondary)' }}>
-                No students assigned to this class.
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {students.map((student) => (
-                  <div
-                    key={student.id}
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      padding: '12px 16px',
-                      background: 'var(--bg-muted)',
-                      borderRadius: 10,
-                      border: '1px solid var(--border-subtle, transparent)',
-                      opacity: isLocked ? 0.7 : 1,
-                      transition: 'border-color 0.2s',
-                      width: '100%',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--brand-light)', color: 'var(--brand)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
-                        {student.name.charAt(0)}
-                      </div>
-                      <div>
-                        <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>{student.name}</div>
-                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>{student.rollNo}</div>
-                      </div>
-                    </div>
-                    
-                    <div style={{ display: 'flex', gap: 8, opacity: isLocked ? 0.8 : 1, pointerEvents: isLocked ? 'none' : 'auto' }}>
-                      <StatusButton 
-                        status="PRESENT" 
-                        currentStatus={student.status} 
-                        onClick={() => setStatus(student.id, 'PRESENT')}
-                        icon={<Check size={16} />}
-                        label="Present"
-                        activeColor="#10B981"
-                      />
-                      <StatusButton 
-                        status="ABSENT" 
-                        currentStatus={student.status} 
-                        onClick={() => setStatus(student.id, 'ABSENT')}
-                        icon={<X size={16} />}
-                        label="Absent"
-                        activeColor="#EF4444"
-                      />
-                      <StatusButton 
-                        status="LATE" 
-                        currentStatus={student.status} 
-                        onClick={() => setStatus(student.id, 'LATE')}
-                        icon={<Clock size={16} />}
-                        label="Late"
-                        activeColor="#F59E0B"
-                      />
-                      <StatusButton 
-                        status="EXCUSED" 
-                        currentStatus={student.status} 
-                        onClick={() => setStatus(student.id, 'EXCUSED')}
-                        icon={<HelpCircle size={16} />}
-                        label="Excused"
-                        activeColor="#3B82F6"
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Structured Card Footer aligned cleanly at bottom */}
-          <div
-            style={{
-              marginTop: 32,
-              paddingTop: 20,
-              borderTop: '1px solid var(--border)',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              width: '100%',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
-              {unrecordedCount === 0 ? (
-                <>
-                  <CheckCircle2 size={18} color="#10B981" />
-                  <span style={{ color: '#10B981', fontWeight: 600 }}>All {totalCount} students recorded</span>
-                </>
-              ) : (
-                <span>
-                  <strong style={{ color: 'var(--text-primary)' }}>{totalCount - unrecordedCount}</strong> of <strong>{totalCount}</strong> recorded ({unrecordedCount} remaining)
-                </span>
-              )}
-            </div>
-
-            <Button
-              variant="primary"
+        <div className="flex items-center gap-3">
+          {isLocked ? (
+            <span className="px-4 py-2 rounded-xl bg-neutral-100 text-neutral-600 text-xs font-bold flex items-center gap-2">
+              <Lock className="w-4 h-4" /> Attendance Finalized
+            </span>
+          ) : (
+            <button
               onClick={handleSaveClick}
-              disabled={loading || isLocked}
-              style={{ padding: '0 32px', height: 42, fontSize: 'var(--text-sm)', fontWeight: 600 }}
+              className="px-5 py-2.5 rounded-xl bg-[#e05934] hover:bg-[#c94a2a] text-white text-xs font-bold transition-all shadow-xs flex items-center gap-2"
             >
-              Save Attendance
-            </Button>
-          </div>
-        </Card>
+              <Save className="w-4 h-4" />
+              <span>Save & Finalize Register</span>
+            </button>
+          )}
+        </div>
       </div>
 
-      {showConfirm && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-          <div style={{ background: 'white', padding: 24, borderRadius: 16, maxWidth: 400, width: '100%', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
-            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8, color: 'var(--text-primary)' }}>Confirm Attendance</h3>
-            <p style={{ color: 'var(--text-secondary)', marginBottom: 24, lineHeight: 1.5, fontSize: 'var(--text-sm)' }}>
-              Are you sure you want to submit attendance for {date}? You will be able to edit this until the end of the day.
+      {/* Date & Class Filter Bar + Metric Summary Grid */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="p-5 rounded-2xl border border-neutral-200/90 bg-white shadow-xs flex flex-col justify-between col-span-2 md:col-span-1">
+          <span className="text-[11px] font-bold tracking-wider text-neutral-400 uppercase">DATE SELECTOR</span>
+          <div className="flex items-center gap-2 mt-2">
+            <CalendarIcon className="w-4 h-4 text-neutral-400" />
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full bg-transparent text-xs font-bold text-neutral-900 focus:outline-none cursor-pointer"
+            />
+          </div>
+        </div>
+
+        <div className="p-5 rounded-2xl border border-neutral-200/90 bg-white shadow-xs flex flex-col justify-between">
+          <span className="text-[11px] font-bold tracking-wider text-neutral-400 uppercase">TOTAL ENROLLED</span>
+          <div className="text-2xl font-extrabold text-neutral-900 mt-2">{totalCount}</div>
+        </div>
+
+        <div className="p-5 rounded-2xl border border-neutral-200/90 bg-white shadow-xs flex flex-col justify-between">
+          <span className="text-[11px] font-bold tracking-wider text-emerald-600 uppercase">PRESENT</span>
+          <div className="text-2xl font-extrabold text-emerald-600 mt-2">{presentCount}</div>
+        </div>
+
+        <div className="p-5 rounded-2xl border border-neutral-200/90 bg-white shadow-xs flex flex-col justify-between">
+          <span className="text-[11px] font-bold tracking-wider text-rose-600 uppercase">ABSENT</span>
+          <div className="text-2xl font-extrabold text-rose-600 mt-2">{absentCount}</div>
+        </div>
+
+        <div className="p-5 rounded-2xl border border-neutral-200/90 bg-white shadow-xs flex flex-col justify-between">
+          <span className="text-[11px] font-bold tracking-wider text-neutral-400 uppercase">ATTENDANCE RATE</span>
+          <div className="text-2xl font-extrabold text-neutral-900 mt-2">{attendanceRate}%</div>
+        </div>
+      </div>
+
+      {/* Main Student Attendance Roster */}
+      <div className="rounded-2xl border border-neutral-200/90 bg-white p-6 shadow-xs flex flex-col gap-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-neutral-100">
+          <div>
+            <h3 className="text-base font-bold text-neutral-900">Student Roll Call</h3>
+            <p className="text-xs text-neutral-500 font-medium">Mark status individually or apply fast batch actions</p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setAllStatus('PRESENT')}
+              disabled={isLocked}
+              className="px-3.5 py-1.5 rounded-xl border border-neutral-200 hover:bg-neutral-50 text-xs font-bold text-neutral-700 transition-colors disabled:opacity-50"
+            >
+              Mark All Present
+            </button>
+            <button
+              onClick={() => setAllStatus('ABSENT')}
+              disabled={isLocked}
+              className="px-3.5 py-1.5 rounded-xl border border-neutral-200 hover:bg-neutral-50 text-xs font-bold text-neutral-700 transition-colors disabled:opacity-50"
+            >
+              Mark All Absent
+            </button>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="space-y-3">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="skeleton h-16 rounded-xl" />
+            ))}
+          </div>
+        ) : students.length === 0 ? (
+          <div className="p-12 text-center flex flex-col items-center">
+            <Users className="w-10 h-10 text-neutral-300 mb-2" />
+            <h4 className="text-sm font-bold text-neutral-800">No Students Enrolled</h4>
+            <p className="text-xs text-neutral-400 mt-1 max-w-sm">
+              There are no enrolled students registered in this section or subject roster.
             </p>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
-              <Button variant="outline" onClick={() => setShowConfirm(false)}>Cancel</Button>
-              <Button variant="primary" onClick={confirmSave}>Submit Attendance</Button>
+          </div>
+        ) : (
+          <div className="space-y-2.5">
+            {students.map((student, idx) => (
+              <motion.div
+                key={student.id}
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: idx * 0.02 }}
+                className="p-3.5 rounded-xl border border-neutral-100 bg-neutral-50/50 hover:bg-neutral-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-neutral-900 text-white font-bold text-xs flex items-center justify-center shrink-0">
+                    {student.name.charAt(0)}
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-neutral-900">{student.name}</div>
+                    <div className="text-[11px] text-neutral-400">Roll: {student.rollNo || `ID-${student.id.slice(0, 5)}`}</div>
+                  </div>
+                </div>
+
+                {/* Status Selector Buttons */}
+                <div className="flex items-center gap-1.5 self-end sm:self-center">
+                  {[
+                    { key: 'PRESENT', label: 'Present', activeCls: 'bg-emerald-500 text-white font-bold' },
+                    { key: 'ABSENT', label: 'Absent', activeCls: 'bg-rose-500 text-white font-bold' },
+                    { key: 'LATE', label: 'Late', activeCls: 'bg-amber-500 text-white font-bold' },
+                    { key: 'EXCUSED', label: 'Excused', activeCls: 'bg-blue-500 text-white font-bold' },
+                  ].map((s) => {
+                    const isSelected = student.status === s.key;
+                    return (
+                      <button
+                        key={s.key}
+                        type="button"
+                        disabled={isLocked}
+                        onClick={() => setStatus(student.id, s.key as AttendanceStatus)}
+                        className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                          isSelected
+                            ? s.activeCls
+                            : 'bg-white border border-neutral-200 text-neutral-600 hover:bg-neutral-100'
+                        } disabled:opacity-50`}
+                      >
+                        {s.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Confirmation Modal */}
+      {showConfirm && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-neutral-200 p-6 max-w-md w-full shadow-xl space-y-4">
+            <h3 className="text-base font-bold text-neutral-900">Confirm Attendance Submission</h3>
+            <p className="text-xs text-neutral-600 leading-relaxed">
+              You are about to save attendance records for <strong>{students.length} students</strong> on <strong>{date}</strong>.
+              Present: {presentCount}, Absent: {absentCount}, Late: {lateCount}.
+            </p>
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                onClick={() => setShowConfirm(false)}
+                className="px-4 py-2 rounded-xl border border-neutral-200 text-xs font-bold text-neutral-600 hover:bg-neutral-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmSave}
+                className="px-4 py-2 rounded-xl bg-[#e05934] hover:bg-[#c94a2a] text-white text-xs font-bold"
+              >
+                Confirm & Save
+              </button>
             </div>
           </div>
         </div>
@@ -295,44 +238,3 @@ export default function AttendancePage() {
     </div>
   );
 }
-
-function StatusButton({ 
-  status, 
-  currentStatus, 
-  onClick, 
-  icon, 
-  label, 
-  activeColor 
-}: { 
-  status: AttendanceStatus, 
-  currentStatus: AttendanceStatus, 
-  onClick: () => void,
-  icon: React.ReactNode,
-  label: string,
-  activeColor: string
-}) {
-  const isActive = currentStatus === status;
-  return (
-    <button
-      onClick={onClick}
-      style={{ 
-        padding: '8px 14px',
-        borderRadius: 20,
-        fontWeight: 600,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 6,
-        border: isActive ? `1px solid ${activeColor}` : '1px solid var(--border)',
-        cursor: 'pointer',
-        transition: 'all 0.2s ease-in-out',
-        background: isActive ? activeColor : 'var(--surface)',
-        color: isActive ? '#FFFFFF' : 'var(--text-secondary)',
-        boxShadow: isActive ? `0 4px 12px ${activeColor}33` : '0 1px 2px rgba(0,0,0,0.05)',
-        fontSize: 'var(--text-xs)'
-      }}
-    >
-      {icon} {label}
-    </button>
-  );
-}
-

@@ -117,15 +117,18 @@ export async function downloadPdfHandler(req: Request, res: Response): Promise<v
 export async function downloadPdfByAssignmentIdHandler(req: Request, res: Response): Promise<void> {
   const { assignmentId } = req.params;
   try {
-    await assertCanViewPaper(req, assignmentId);
     const paper = await prisma.generatedPaper.findFirst({
-      where: { assignmentId },
+      where: {
+        OR: [{ assignmentId }, { id: assignmentId }],
+      },
       orderBy: { createdAt: 'desc' },
     });
     if (!paper) {
       sendError(res, 'Paper not found for this assignment', 404);
       return;
     }
+
+    await assertCanViewPaper(req, paper.assignmentId);
 
     const storage = getPdfStorage();
     let data: Buffer | null = null;
@@ -141,7 +144,7 @@ export async function downloadPdfByAssignmentIdHandler(req: Request, res: Respon
 
     if (!data) {
       // PDF file doesn't exist on disk or pdfUrl was null -> generate on-the-fly!
-      logger.info(`[downloadPdfByAssignmentIdHandler] Generating PDF on demand for assignment ${assignmentId}...`);
+      logger.info(`[downloadPdfByAssignmentIdHandler] Generating PDF on demand for assignment ${paper.assignmentId}...`);
       try {
         const { generatePdf } = await import('../services/pdf.service');
         const genResult = await generatePdf(paper as any);
@@ -163,7 +166,7 @@ export async function downloadPdfByAssignmentIdHandler(req: Request, res: Respon
     }
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send(data);
   } catch (err) {
     if (handleAccessError(res, err)) return;

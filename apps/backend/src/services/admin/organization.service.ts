@@ -132,8 +132,55 @@ export class OrganizationService {
 
   static async deleteOrganization(id: string) {
     return prisma.$transaction(async (tx) => {
-      // Delete associated users to prevent foreign key constraint errors
-      await tx.user.deleteMany({ where: { organizationId: id } });
+      // 1. Delete deeply nested dependent records
+      await tx.studentSubmission.deleteMany({ where: { organizationId: id } });
+      await tx.generatedPaper.deleteMany({ where: { organizationId: id } });
+      await tx.assignment.deleteMany({ where: { organizationId: id } });
+      await tx.assessment.deleteMany({ where: { organizationId: id } });
+      await tx.question.deleteMany({ where: { organizationId: id } });
+      await tx.questionBank.deleteMany({ where: { organizationId: id } });
+      await tx.quizSession.deleteMany({ where: { organizationId: id } });
+      await tx.tutorSession.deleteMany({ where: { organizationId: id } });
+      await tx.teacherTutorConfig.deleteMany({ where: { organizationId: id } });
+      await tx.attendanceRecord.deleteMany({ where: { organizationId: id } });
+      await tx.leaveApplication.deleteMany({ where: { organizationId: id } });
+      await tx.libraryResource.deleteMany({ where: { organizationId: id } });
+      await tx.knowledgeDocument.deleteMany({ where: { organizationId: id } });
+      await tx.promptExecution.deleteMany({ where: { organizationId: id } });
+      await tx.promptTemplate.deleteMany({ where: { organizationId: id } });
+      await tx.approvalRecord.deleteMany({ where: { organizationId: id } });
+      await tx.academicReport.deleteMany({ where: { organizationId: id } });
+      await tx.copilotWorkflow.deleteMany({ where: { organizationId: id } });
+      await tx.rubric.deleteMany({ where: { organizationId: id } });
+      await tx.aIRecommendation.deleteMany({ where: { organizationId: id } });
+      await tx.blueprint.deleteMany({ where: { organizationId: id } });
+      await tx.course.deleteMany({ where: { organizationId: id } });
+      await tx.program.deleteMany({ where: { organizationId: id } });
+      await tx.syllabus.deleteMany({ where: { organizationId: id } });
+      await tx.lessonPlan.deleteMany({ where: { organizationId: id } });
+      await tx.worksheet.deleteMany({ where: { organizationId: id } });
+      await tx.generatedNotes.deleteMany({ where: { organizationId: id } });
+      await tx.voiceRoom.deleteMany({ where: { organizationId: id } });
+      await tx.meeting.deleteMany({ where: { organizationId: id } });
+      await tx.communityPost.deleteMany({ where: { organizationId: id } });
+      await tx.communityGroup.deleteMany({ where: { organizationId: id } });
+      await tx.classGroup.deleteMany({ where: { organizationId: id } });
+      await tx.group.deleteMany({ where: { organizationId: id } });
+      await tx.class.deleteMany({ where: { organizationId: id } });
+      await tx.classroom.deleteMany({ where: { organizationId: id } });
+      await tx.department.deleteMany({ where: { organizationId: id } });
+      await tx.invitation.deleteMany({ where: { organizationId: id } });
+      await tx.subscription.deleteMany({ where: { organizationId: id } });
+      await tx.auditLog.deleteMany({ where: { organizationId: id } });
+      await tx.notification.deleteMany({ where: { organizationId: id } });
+
+      // 2. Safely dissociate users belonging to this organization so foreign key references to user accounts remain intact
+      await tx.user.updateMany({
+        where: { organizationId: id },
+        data: { organizationId: null, activeOrganizationId: null },
+      });
+
+      // 3. Delete the organization record
       return tx.organization.delete({
         where: { id },
       });
@@ -141,10 +188,21 @@ export class OrganizationService {
   }
 
   static async suspendOrganization(id: string, suspend: boolean = true) {
+    if (!id) throw new Error('Organization ID is required');
+    const existing = await prisma.organization.findUnique({
+      where: { id },
+      select: { id: true, status: true },
+    });
+    if (!existing) {
+      throw new Error(`Organization with ID ${id} not found`);
+    }
+
+    const nextStatus = suspend ? 'SUSPENDED' : 'ACTIVE';
     return prisma.organization.update({
       where: { id },
       data: {
-        status: suspend ? 'SUSPENDED' : 'ACTIVE',
+        status: nextStatus,
+        updatedAt: new Date(),
       },
     });
   }

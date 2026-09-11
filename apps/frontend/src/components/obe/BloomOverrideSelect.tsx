@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { BloomLevel } from './BloomClassificationBadge';
+import { SelectDropdown } from '@/components/ui/select-dropdown';
 
 const BLOOM_OPTIONS: BloomLevel[] = [
   'REMEMBER',
@@ -28,29 +29,23 @@ export function BloomOverrideSelect({
   const isOverridden = predictedLevel && currentLevel !== predictedLevel;
 
   return (
-    <div className="flex items-center gap-2">
-      <select
+    <div className="flex items-center gap-1.5">
+      <SelectDropdown
         value={currentLevel}
-        onChange={(e) => onChange(e.target.value as BloomLevel)}
+        onValueChange={(val) => onChange(val as BloomLevel)}
         disabled={disabled}
-        className={`text-xs font-semibold rounded-md border px-2 py-1 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-colors ${
-          isOverridden
-            ? 'bg-amber-50 border-amber-300 text-amber-900'
-            : 'bg-white border-slate-300 text-slate-700 hover:border-slate-400'
-        }`}
-        aria-label="Select Bloom Level Override"
-      >
-        {BLOOM_OPTIONS.map((lvl) => (
-          <option key={lvl} value={lvl}>
-            {lvl} {predictedLevel === lvl ? '(AI Auto)' : ''}
-          </option>
-        ))}
-      </select>
+        options={BLOOM_OPTIONS.map((lvl) => ({
+          value: lvl,
+          label: `${lvl} ${predictedLevel === lvl ? '(AI Auto)' : ''}`
+        }))}
+        sizeVariant="sm"
+        className={isOverridden ? 'bg-amber-50 border-amber-300 text-amber-900' : ''}
+      />
       {isOverridden && predictedLevel && (
         <button
           type="button"
           onClick={() => onChange(predictedLevel)}
-          className="text-[10px] text-slate-500 hover:text-indigo-600 underline font-medium"
+          className="text-[10px] text-slate-500 hover:text-indigo-600 underline font-medium cursor-pointer"
           title={`Reset to AI prediction (${predictedLevel})`}
         >
           Reset

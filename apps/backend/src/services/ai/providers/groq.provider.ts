@@ -13,8 +13,15 @@ export class GroqProvider implements AIProvider {
     });
   }
 
+  private resolveModel(model?: string): string {
+    if (!model || model.startsWith('meta/')) {
+      return 'openai/gpt-oss-120b';
+    }
+    return model;
+  }
+
   async generate(prompt: string, options?: any, signal?: AbortSignal): Promise<any> {
-    const model = options?.model || 'openai/gpt-oss-120b';
+    const model = this.resolveModel(options?.model);
     let messages: any[] = [{ role: 'user', content: prompt }];
     
     if (options?.media && options.media.length > 0) {
@@ -41,7 +48,7 @@ export class GroqProvider implements AIProvider {
   }
 
   async *stream(prompt: string, options?: any): AsyncIterable<any> {
-    const model = options?.model || 'openai/gpt-oss-120b';
+    const model = this.resolveModel(options?.model);
     const stream = await this.client.chat.completions.create(
       {
         model,

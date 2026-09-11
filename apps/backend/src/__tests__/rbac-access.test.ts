@@ -80,11 +80,12 @@ describe('RBAC — role permissions', () => {
     expect(hasPermission('FACULTY', PERMISSIONS.VIEW_PAPER)).toBe(true);
   });
 
-  it('STUDENT can submit and view results only', () => {
+  it('STUDENT can submit and view results and published assignments', () => {
     expect(hasPermission('STUDENT', PERMISSIONS.SUBMIT_ASSESSMENT)).toBe(true);
     expect(hasPermission('STUDENT', PERMISSIONS.VIEW_RESULTS)).toBe(true);
-    expect(hasPermission('STUDENT', PERMISSIONS.CREATE_ASSIGNMENT)).toBe(false);
     expect(hasPermission('STUDENT', PERMISSIONS.VIEW_ASSIGNMENT)).toBe(true);
+    expect(hasPermission('STUDENT', PERMISSIONS.CREATE_ASSIGNMENT)).toBe(false);
+
     expect(hasPermission('STUDENT', PERMISSIONS.GRADE_ASSESSMENT)).toBe(false);
   });
 

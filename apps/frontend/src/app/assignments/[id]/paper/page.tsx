@@ -195,17 +195,48 @@ export default function PaperViewPage({ params }: { params: Promise<{ id: string
   };
 
   const handleDownload = async () => {
-    if (!paper?.pdfUrl) { window.print(); return; }
     setDownloading(true);
     try {
-      const link = document.createElement('a');
-      link.href = resolveAssetUrl(paper.pdfUrl);
-      link.download = `${paper.title.replace(/\s+/g, '_')}.pdf`;
-      link.rel = 'noopener';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } finally { setDownloading(false); }
+      // 1. Attempt authenticated download directly from backend
+      try {
+        const res = await apiClient.get(`/papers/${id}/pdf`, { responseType: 'blob' });
+        if (res.data) {
+          const blob = new Blob([res.data], { type: 'application/pdf' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `${(paper?.title || 'question_paper').replace(/\s+/g, '_')}.pdf`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+          toast.success('PDF downloaded successfully');
+          return;
+        }
+      } catch (apiErr) {
+        console.warn('API PDF stream failed, trying asset URL...', apiErr);
+      }
+
+      // 2. If paper has pdfUrl, try direct link
+      if (paper?.pdfUrl) {
+        const link = document.createElement('a');
+        link.href = resolveAssetUrl(paper.pdfUrl);
+        link.download = `${(paper.title || 'question_paper').replace(/\s+/g, '_')}.pdf`;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        return;
+      }
+
+      // 3. Fallback to print
+      window.print();
+    } catch {
+      toast.error('Failed to download PDF');
+    } finally {
+      setDownloading(false);
+    }
   };
 
   if (loading) {

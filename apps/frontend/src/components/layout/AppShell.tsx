@@ -261,7 +261,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <>
       <FullScreenLoader isLoading={(isLoading || isRedirectingToLogin) && !isPublicPage} />
-      <div suppressHydrationWarning className="flex min-h-screen w-full bg-[#F8F7F4] relative overflow-x-hidden">
+      <div suppressHydrationWarning className="flex min-h-screen w-full bg-white relative overflow-x-hidden">
         {SidebarComponent}
         <div
           suppressHydrationWarning

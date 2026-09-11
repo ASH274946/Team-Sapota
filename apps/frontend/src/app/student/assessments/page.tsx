@@ -50,8 +50,15 @@ export default function StudentAssessmentsPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.get<{ success: boolean; data: StudentAssessment[] }>('/student/assessments');
-      setAssessments(res.data.data ?? []);
+      const res = await api.get('/student/assessments');
+      const list: StudentAssessment[] = Array.isArray(res.data?.data)
+        ? res.data.data
+        : Array.isArray((res.data as any)?.data?.assessments)
+        ? (res.data as any).data.assessments
+        : Array.isArray(res.data)
+        ? (res.data as any)
+        : [];
+      setAssessments(list);
     } catch (err: any) {
       setError(err.message || 'Failed to load assessments');
       toast.error('Failed to load assessments');

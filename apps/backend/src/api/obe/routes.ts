@@ -42,6 +42,7 @@ import {
   getCoPoMatrixController,
   updateCoPoMatrixController,
   classifyBloomController,
+  generateBlueprintQuestionsController,
 } from './controller';
 import {
   idParamSchema,
@@ -71,7 +72,7 @@ const router = Router();
 router.use(authenticate);
 
 router.get('/courses', requireRole('ADMIN', 'TEACHER'), asyncHandler(listCourses));
-router.post('/courses', requireRole('ADMIN'), validate(createCourseSchema), asyncHandler(createCourse));
+router.post('/courses', requireRole('ADMIN', 'TEACHER'), validate(createCourseSchema), asyncHandler(createCourse));
 router.get('/courses/:courseId', requireRole('ADMIN', 'TEACHER'), validate(courseIdParamSchema), asyncHandler(getCurriculumGraph));
 router.post('/courses/:courseId/validate', requireRole('ADMIN', 'TEACHER'), validate(courseIdParamSchema), asyncHandler(validateMappingIntegrity));
 
@@ -102,6 +103,7 @@ router.get('/mappings/changes', requireRole('ADMIN', 'TEACHER'), asyncHandler(ge
 router.get('/mappings/changes/stats', requireRole('ADMIN', 'TEACHER'), asyncHandler(getMappingChangeStats));
 router.get('/mappings/changes/:mappingId', requireRole('ADMIN', 'TEACHER'), asyncHandler(getMappingChangeHistory));
 
+router.post('/blueprints/generate', requireRole('ADMIN', 'TEACHER'), asyncHandler(generateBlueprintQuestionsController));
 router.get('/blueprints/pending', requireRole('ADMIN'), asyncHandler(listPendingBlueprints));
 router.get('/courses/:courseId/blueprints', requireRole('ADMIN', 'TEACHER'), validate(courseIdParamSchema), asyncHandler(listBlueprints));
 router.post('/courses/:courseId/blueprints', requireRole('ADMIN', 'TEACHER'), validate(createBlueprintSchema), asyncHandler(createBlueprint));

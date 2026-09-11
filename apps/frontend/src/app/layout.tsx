@@ -4,33 +4,34 @@ import { AppShell } from '@/components/layout/AppShell';
 import { ThemeProvider } from '@/components/providers/theme-provider';
 import { CommandPalette } from '@/components/ui/CommandPalette';
 import { GoogleOAuthProvider } from '@react-oauth/google';
+import { constructMetadata, getOrganizationSchema, getSoftwareApplicationSchema } from '@/lib/seo';
 
-export const metadata: Metadata = {
-  title: 'Vidya AI — AI-Powered Assessment Creator',
-  description:
-    'Generate professional exam papers in seconds with AI. Vidya AI helps educators create structured, high-quality assessments effortlessly.',
-  keywords: ['AI assessment', 'exam generator', 'question paper', 'teacher tools', 'education AI'],
-  icons: {
-    icon: '/logo.png',
-    shortcut: '/logo.png',
-    apple: '/logo.png',
-  },
-  openGraph: {
-    title: 'Vidya AI — AI-Powered Assessment Creator',
-    description: 'Generate professional exam papers in seconds with AI.',
-    type: 'website',
-    images: ['/logo.png'],
-  },
-};
+export const metadata: Metadata = constructMetadata({
+  path: '',
+});
 
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const orgSchema = getOrganizationSchema();
+  const softwareSchema = getSoftwareApplicationSchema();
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <link rel="icon" type="image/png" href="/logo-icon.png" sizes="any" />
+        <link rel="shortcut icon" type="image/png" href="/logo-icon.png" />
+        <link rel="apple-touch-icon" href="/logo-icon.png" />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(orgSchema) }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareSchema) }}
+        />
         {/*
           Inline synchronous script — runs BEFORE React hydration.
           This uses a MutationObserver to catch and remove `bis_skin_checked` and similar attrs

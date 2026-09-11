@@ -1,18 +1,12 @@
 'use client';
-import { NativeSelect } from '@/components/ui/native-select';
-
 
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
-import { Search, Terminal, X, Calendar } from 'lucide-react';
+import { Search, Terminal, X, Eye } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { PageHeader } from '@/design-system/PageHeader';
-import { Card } from '@/design-system/Card';
-import { Badge } from '@/design-system/Badge';
-import { LoadingState } from '@/design-system/LoadingState';
-import { EmptyState } from '@/design-system/EmptyState';
-import { Button } from '@/design-system/Button';
 import { Pagination } from '@/components/ui/Pagination';
+import { NativeSelect } from '@/components/ui/native-select';
+import { motion } from 'framer-motion';
 
 interface AuditEntry {
   id: string;
@@ -59,23 +53,41 @@ export default function SuperAdminAudit() {
       if (res.data?.success) {
         setLogs(res.data.data.logs || res.data.data);
         setTotalPages(res.data.data.totalPages || 1);
-        const distinct = Array.from(new Set((res.data.data.logs || res.data.data).map((l: AuditEntry) => l.action))).filter(Boolean) as string[];
-        setActions(prev => prev.length ? prev : distinct);
+        const distinct = Array.from(
+          new Set((res.data.data.logs || res.data.data).map((l: AuditEntry) => l.action))
+        ).filter(Boolean) as string[];
+        setActions((prev) => (prev.length ? prev : distinct));
       }
-    } catch { toast.error('Failed to load audit logs'); }
-    finally { setLoading(false); }
+    } catch {
+      toast.error('Failed to load audit logs');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  useEffect(() => { loadLogs(); }, [page, actionFilter, dateFrom, dateTo, search]);
+  useEffect(() => {
+    loadLogs();
+  }, [page, actionFilter, dateFrom, dateTo, search]);
 
-  const handleFilter = () => { setPage(1); loadLogs(); };
+  const handleFilter = () => {
+    setPage(1);
+    loadLogs();
+  };
 
-  const getActionVariant = (action: string): 'error' | 'info' | 'warning' | 'success' | 'draft' => {
-    if (action.includes('FAIL') || action.includes('ERR') || action.includes('DELETE')) return 'error';
-    if (action.includes('CREATE') || action.includes('RESET')) return 'info';
-    if (action.includes('UPDATE') || action.includes('EDIT')) return 'warning';
-    if (action.includes('LOGIN') || action.includes('APPROVE')) return 'success';
-    return 'draft';
+  const getActionBadgeClass = (action: string) => {
+    if (action.includes('FAIL') || action.includes('ERR') || action.includes('DELETE')) {
+      return 'bg-rose-50 text-rose-700 border-rose-200';
+    }
+    if (action.includes('CREATE') || action.includes('RESET')) {
+      return 'bg-blue-50 text-blue-700 border-blue-200';
+    }
+    if (action.includes('UPDATE') || action.includes('EDIT')) {
+      return 'bg-amber-50 text-amber-700 border-amber-200';
+    }
+    if (action.includes('LOGIN') || action.includes('APPROVE')) {
+      return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    }
+    return 'bg-neutral-100 text-neutral-700 border-neutral-200';
   };
 
   const formatIpAddress = (ip: string) => {
@@ -87,153 +99,246 @@ export default function SuperAdminAudit() {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      <PageHeader
-        title="Audit Log Viewer"
-        subtitle="Track all platform-wide actions, changes, and administrative operations."
-      />
+    <div className="max-w-[1600px] mx-auto text-slate-900 font-sans flex flex-col gap-6">
+      {/* Top Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-extrabold text-neutral-900 tracking-tight">
+            Security & Audit Trail
+          </h1>
+          <p className="text-xs md:text-sm text-neutral-500 font-medium mt-1">
+            Immutable platform-wide audit log for compliance, administrative actions, and IP tracking
+          </p>
+        </div>
+      </div>
 
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '2fr 1fr',
-        gap: 16,
-        alignItems: 'start',
-      }}>
-        <Card padding="clamp(16px, 2vw, 20px)">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
-                <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                <input type="text" placeholder="Search by user, action, or IP..." value={search} onChange={e => setSearch(e.target.value)}
-                  style={{ width: '100%', padding: '8px 14px 8px 36px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', fontSize: 'var(--text-sm)', fontFamily: 'inherit', background: 'var(--bg-input)', outline: 'none', boxSizing: 'border-box' }}
-                  onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--border-focus)'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(232, 83, 29, 0.1)'; }}
-                  onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.boxShadow = 'none'; }}
+      {/* Main Grid: Log Table (Left) + Detail Inspector (Right) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        {/* Left Column: Filter + Table */}
+        <div className="lg:col-span-2 space-y-4">
+          <div className="p-4 rounded-2xl border border-neutral-200/90 bg-white shadow-xs space-y-3">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search by user, operation, or IP address..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 bg-neutral-50 border border-neutral-200 rounded-xl text-xs"
                 />
               </div>
-              <NativeSelect value={actionFilter} onChange={e => { setActionFilter(e.target.value); setPage(1); }}
-                style={{ padding: '8px 32px 8px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', fontSize: 'var(--text-sm)', fontFamily: 'inherit', background: 'var(--bg-input)', outline: 'none', appearance: 'none', minWidth: 140, cursor: 'pointer' }}>
-                <option value="">All Actions</option>
-                {actions.map(a => <option key={a} value={a}>{a}</option>)}
+              <NativeSelect
+                value={actionFilter}
+                onChange={(e) => {
+                  setActionFilter(e.target.value);
+                  setPage(1);
+                }}
+                className="px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl text-xs font-bold text-neutral-800"
+              >
+                <option value="">All Operations</option>
+                {actions.map((a) => (
+                  <option key={a} value={a}>
+                    {a}
+                  </option>
+                ))}
               </NativeSelect>
             </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-              <Calendar size={14} color="var(--text-muted)" />
-              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-                style={{ padding: '8px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', fontSize: 'var(--text-sm)', fontFamily: 'inherit', background: 'var(--bg-input)', outline: 'none' }} />
-              <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>to</span>
-              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-                style={{ padding: '8px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', fontSize: 'var(--text-sm)', fontFamily: 'inherit', background: 'var(--bg-input)', outline: 'none' }} />
-              <Button variant="primary" size="sm" onClick={handleFilter}>Apply</Button>
+
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider">Date:</span>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs"
+              />
+              <span className="text-xs text-neutral-400">to</span>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs"
+              />
+              <button
+                onClick={handleFilter}
+                className="px-3 py-1.5 rounded-lg bg-neutral-900 text-white text-xs font-bold hover:bg-neutral-800"
+              >
+                Apply
+              </button>
             </div>
           </div>
 
-          {loading ? (
-            <LoadingState lines={8} />
-          ) : logs.length === 0 ? (
-            <EmptyState
-              icon={<Terminal size={32} />}
-              title="No audit logs found"
-              description="Try adjusting your filters or search terms."
-            />
-          ) : (
-            <>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--text-sm)' }}>
+          {/* Table */}
+          <div className="rounded-2xl border border-neutral-200/90 bg-white shadow-xs overflow-hidden">
+            {loading ? (
+              <div className="p-8 space-y-3">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className="skeleton h-12 rounded-xl" />
+                ))}
+              </div>
+            ) : logs.length === 0 ? (
+              <div className="p-12 text-center flex flex-col items-center">
+                <Terminal className="w-10 h-10 text-neutral-300 mb-2" />
+                <h4 className="text-sm font-bold text-neutral-800">No Audit Events Logged</h4>
+                <p className="text-xs text-neutral-400 mt-1">Adjust your filters to inspect historical logs.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
                   <thead>
-                    <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                      {['Timestamp', 'User', 'Action', 'Entity / ID', 'IP Address', ''].map(h => (
-                        <th key={h} style={{ textAlign: h === '' ? 'right' : 'left', padding: '10px 14px', fontWeight: 600, color: 'var(--text-muted)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>
-                          {h}
-                        </th>
-                      ))}
+                    <tr className="border-b border-neutral-100 bg-neutral-50/50 text-[11px] font-bold uppercase tracking-wider text-neutral-400">
+                      <th className="py-3 px-4">Timestamp</th>
+                      <th className="py-3 px-4">User</th>
+                      <th className="py-3 px-4">Operation</th>
+                      <th className="py-3 px-4">Entity</th>
+                      <th className="py-3 px-4">Client IP</th>
+                      <th className="py-3 px-4 text-right">Inspect</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {logs.map(log => {
-                      const userName = log.user ? `${log.user.firstName} ${log.user.lastName}`.trim() : (log.userEmail || log.userId || 'System');
-                      
+                  <tbody className="divide-y divide-neutral-100">
+                    {logs.map((log) => {
+                      const userName = log.user
+                        ? `${log.user.firstName} ${log.user.lastName}`.trim()
+                        : log.userEmail || log.userId || 'System Engine';
+                      const isSelected = selectedLog?.id === log.id;
                       return (
-                      <tr key={log.id} style={{ borderBottom: '1px solid var(--border)', transition: 'background 0.1s' }}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
-                        <td style={{ padding: '10px 14px', color: 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap', fontSize: 'var(--text-xs)' }}>
-                          {new Date(log.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                        </td>
-                        <td style={{ padding: '10px 14px', color: 'var(--text-primary)', fontWeight: 600 }}>{userName}</td>
-                        <td style={{ padding: '10px 14px' }}>
-                          <Badge variant={getActionVariant(log.action)}>
-                            {log.action.replace(/_/g, ' ')}
-                          </Badge>
-                        </td>
-                        <td style={{ padding: '10px 14px', color: 'var(--text-secondary)' }}>
-                          <div>{log.entity || '-'}</div>
-                          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-                            {log.metadata?.name ? String(log.metadata.name) : (log.entityId ? log.entityId.substring(0, 12) + '...' : '-')}
-                          </div>
-                        </td>
-                        <td style={{ padding: '10px 14px', color: 'var(--text-secondary)', fontFamily: 'monospace', fontSize: 'var(--text-xs)' }}>{formatIpAddress(log.ipAddress)}</td>
-                        <td style={{ padding: '10px 14px', textAlign: 'right' }}>
-                          <Button variant="ghost" size="sm" onClick={() => setSelectedLog(log)}>View</Button>
-                        </td>
-                      </tr>
-                    )})}
+                        <tr
+                          key={log.id}
+                          className={`hover:bg-neutral-50/60 transition-colors cursor-pointer ${
+                            isSelected ? 'bg-orange-50/40' : ''
+                          }`}
+                          onClick={() => setSelectedLog(log)}
+                        >
+                          <td className="py-3 px-4 text-neutral-400 font-mono text-[11px] whitespace-nowrap">
+                            {new Date(log.createdAt).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </td>
+                          <td className="py-3 px-4 font-bold text-neutral-900">{userName}</td>
+                          <td className="py-3 px-4">
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${getActionBadgeClass(
+                                log.action
+                              )}`}
+                            >
+                              {log.action.replace(/_/g, ' ')}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-neutral-600 font-medium">
+                            <div>{log.entity || '-'}</div>
+                            <div className="text-[10px] text-neutral-400">
+                              {log.metadata?.name
+                                ? String(log.metadata.name)
+                                : log.entityId
+                                ? log.entityId.substring(0, 10) + '...'
+                                : '-'}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 font-mono text-[11px] text-neutral-500">
+                            {formatIpAddress(log.ipAddress)}
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedLog(log);
+                              }}
+                              className="p-1 rounded-lg hover:bg-neutral-100 text-neutral-500"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
+            )}
 
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 12, flexWrap: 'wrap', gap: 12 }}>
-                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Page {page} of {totalPages}</span>
-                <div style={{ maxWidth: 280 }}>
-                  <Pagination
-                    totalPages={totalPages || 1}
-                    value={page}
-                    onChange={setPage}
-                  />
-                </div>
+            {/* Pagination */}
+            <div className="p-3 border-t border-neutral-100 flex items-center justify-between bg-neutral-50/50">
+              <span className="text-xs text-neutral-400 font-medium">
+                Page {page} of {totalPages}
+              </span>
+              <div className="max-w-xs">
+                <Pagination totalPages={totalPages || 1} value={page} onChange={setPage} />
               </div>
-            </>
-          )}
-        </Card>
+            </div>
+          </div>
+        </div>
 
-        <Card padding="clamp(16px, 2vw, 20px)" style={{ position: 'sticky', top: '88px' }}>
+        {/* Right Column: Detail Inspector Card */}
+        <div className="sticky top-20">
           {!selectedLog ? (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 16px', textAlign: 'center' }}>
-              <Terminal size={32} color="var(--text-muted)" style={{ marginBottom: 8 }} />
-              <h4 style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Entry Details</h4>
-              <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 4, maxWidth: 200 }}>Click "View" on a log entry to inspect full details and metadata.</p>
+            <div className="rounded-2xl border border-neutral-200/90 bg-white p-8 shadow-xs text-center flex flex-col items-center">
+              <Terminal className="w-10 h-10 text-neutral-300 mb-2" />
+              <h4 className="text-xs font-bold text-neutral-700 uppercase tracking-wider">Inspect Event</h4>
+              <p className="text-xs text-neutral-400 mt-1 max-w-xs">
+                Select any log entry on the left to inspect its parameters, stack trace, and JSON metadata.
+              </p>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="rounded-2xl border border-neutral-200/90 bg-white p-5 shadow-xs space-y-4"
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-neutral-100">
                 <div>
-                  <h3 style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Audit Entry</h3>
-                  <Badge variant={getActionVariant(selectedLog.action)}>{selectedLog.action}</Badge>
+                  <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">
+                    EVENT PAYLOAD
+                  </span>
+                  <h4 className="text-xs font-bold text-neutral-900 mt-0.5">{selectedLog.action}</h4>
                 </div>
-                <Button variant="ghost" size="sm" icon={<X size={16} />} onClick={() => setSelectedLog(null)} />
+                <button
+                  onClick={() => setSelectedLog(null)}
+                  className="p-1 rounded-lg hover:bg-neutral-100 text-neutral-400"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 'var(--text-sm)' }}>
-                {[
-                  { label: 'Timestamp', value: new Date(selectedLog.createdAt).toLocaleString() },
-                  { label: 'User', value: selectedLog.user ? `${selectedLog.user.firstName} ${selectedLog.user.lastName}`.trim() : (selectedLog.userEmail || selectedLog.userId || 'System') },
-                  { label: 'Entity', value: selectedLog.entity || '-' },
-                  { label: 'Entity ID', value: selectedLog.metadata?.name ? String(selectedLog.metadata.name) : (selectedLog.entityId || '-') },
-                  { label: 'IP Address', value: formatIpAddress(selectedLog.ipAddress) },
-                ].map(({ label, value }) => (
-                  <div key={label} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>{label}</span>
-                    <span style={{ fontWeight: 600, color: 'var(--text-primary)', textAlign: 'right', maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</span>
-                  </div>
-                ))}
+
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between py-1 border-b border-neutral-50">
+                  <span className="text-neutral-400 font-medium">Timestamp</span>
+                  <span className="font-semibold text-neutral-800">
+                    {new Date(selectedLog.createdAt).toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-neutral-50">
+                  <span className="text-neutral-400 font-medium">User / Actor</span>
+                  <span className="font-semibold text-neutral-800">
+                    {selectedLog.user
+                      ? `${selectedLog.user.firstName} ${selectedLog.user.lastName}`
+                      : selectedLog.userEmail || 'System'}
+                  </span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-neutral-50">
+                  <span className="text-neutral-400 font-medium">Target Entity</span>
+                  <span className="font-semibold text-neutral-800">{selectedLog.entity || '-'}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-neutral-50">
+                  <span className="text-neutral-400 font-medium">Client IP</span>
+                  <span className="font-mono text-neutral-800">{formatIpAddress(selectedLog.ipAddress)}</span>
+                </div>
               </div>
-              <div style={{ paddingTop: 8 }}>
-                <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 8 }}>Metadata</span>
-                <pre style={{ background: '#111827', color: '#34D399', padding: 16, borderRadius: 'var(--radius-md)', fontSize: '10px', overflow: 'auto', maxHeight: 250, lineHeight: 1.5, border: '1px solid #1F2937', margin: 0 }}>
+
+              <div>
+                <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block mb-2">
+                  JSON Metadata Payload
+                </span>
+                <pre className="p-3 rounded-xl bg-neutral-900 text-emerald-400 text-[11px] font-mono overflow-auto max-h-60 leading-relaxed">
                   {JSON.stringify(selectedLog.metadata || {}, null, 2)}
                 </pre>
               </div>
-            </div>
+            </motion.div>
           )}
-        </Card>
+        </div>
       </div>
     </div>
   );

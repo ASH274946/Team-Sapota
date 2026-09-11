@@ -1,12 +1,17 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { PageHeader } from '@/design-system/PageHeader';
-import { Card } from '@/design-system/Card';
-import { Users, Plus, Search, Settings, Trash2 } from 'lucide-react';
+import { motion } from 'framer-motion';
+import {
+  Users,
+  Plus,
+  Search,
+  Trash2,
+} from 'lucide-react';
 import { api } from '@/lib/api';
 import toast from 'react-hot-toast';
+import Link from 'next/link';
 
 interface Group {
   id: string;
@@ -15,8 +20,7 @@ interface Group {
   subject: string;
   className: string;
   students: number;
-  color: string;
-  iconColor: string;
+  color?: string;
 }
 
 export default function GroupsListingPage() {
@@ -30,7 +34,7 @@ export default function GroupsListingPage() {
     try {
       const res = await api.get<{ success: boolean; data: Group[] }>('/groups');
       setGroups(res.data.data || []);
-    } catch (err: any) {
+    } catch {
       toast.error('Failed to load groups');
     } finally {
       setLoading(false);
@@ -52,124 +56,140 @@ export default function GroupsListingPage() {
     }
   };
 
-  const filteredGroups = groups.filter(g => 
-    g.name.toLowerCase().includes(search.toLowerCase()) || 
-    (g.className && g.className.toLowerCase().includes(search.toLowerCase()))
-  );
+  const filteredGroups = useMemo(() => {
+    return groups.filter(
+      (g) =>
+        g.name.toLowerCase().includes(search.toLowerCase()) ||
+        (g.className && g.className.toLowerCase().includes(search.toLowerCase())) ||
+        (g.subject && g.subject.toLowerCase().includes(search.toLowerCase()))
+    );
+  }, [groups, search]);
+
+  const totalMembers = useMemo(() => {
+    return groups.reduce((acc, g) => acc + (g.students || 0), 0);
+  }, [groups]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, padding: '40px 32px 80px', width: '100%', maxWidth: 1600, margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
-        <PageHeader 
-          title="Group Management" 
-          subtitle="Manage your student groups, assign work, and track overall progress."
-        />
-        
-        <button 
-          onClick={() => router.push('/teacher/groups/create')}
-          style={{ 
-            display: 'flex', alignItems: 'center', gap: 8, 
-            background: 'var(--brand)', color: 'white', 
-            border: 'none', padding: '10px 20px', borderRadius: '12px',
-            fontWeight: 600, cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(249, 115, 22, 0.2)'
-          }}
-        >
-          <Plus size={18} /> Create Group
-        </button>
+    <div className="max-w-[1600px] mx-auto text-slate-900 font-sans flex flex-col gap-6">
+      {/* Top Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-extrabold text-neutral-900 tracking-tight">
+            Student Study Groups
+          </h1>
+          <p className="text-xs md:text-sm text-neutral-500 font-medium mt-1">
+            Organize student project cohorts, target assignments, and monitor group performance
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <Link
+            href="/teacher/groups/create"
+            className="px-4 py-2.5 rounded-xl bg-[#e05934] hover:bg-[#c94a2a] text-white text-xs font-bold transition-all shadow-xs flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Create New Group</span>
+          </Link>
+        </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 16, alignItems: 'center', background: 'var(--surface)', padding: '12px 16px', borderRadius: 12, border: '1px solid var(--border)' }}>
-        <Search size={18} color="var(--text-tertiary)" />
-        <input 
-          type="text" 
-          placeholder="Search groups by name or class..." 
+      {/* Metrics Bar */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+        <div className="p-5 rounded-2xl border border-neutral-200/90 bg-white shadow-xs flex flex-col justify-between">
+          <span className="text-[11px] font-bold tracking-wider text-neutral-400 uppercase">ACTIVE GROUPS</span>
+          <div className="text-2xl font-extrabold text-neutral-900 mt-2">{groups.length}</div>
+        </div>
+        <div className="p-5 rounded-2xl border border-neutral-200/90 bg-white shadow-xs flex flex-col justify-between">
+          <span className="text-[11px] font-bold tracking-wider text-neutral-400 uppercase">TOTAL MEMBERS</span>
+          <div className="text-2xl font-extrabold text-emerald-600 mt-2">{totalMembers} Students</div>
+        </div>
+        <div className="p-5 rounded-2xl border border-neutral-200/90 bg-white shadow-xs flex flex-col justify-between col-span-2 sm:col-span-1">
+          <span className="text-[11px] font-bold tracking-wider text-neutral-400 uppercase">SUBJECT COVERAGE</span>
+          <div className="text-2xl font-extrabold text-blue-600 mt-2">
+            {new Set(groups.map((g) => g.subject).filter(Boolean)).size || 1} Subjects
+          </div>
+        </div>
+      </div>
+
+      {/* Search Input */}
+      <div className="relative max-w-md w-full">
+        <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+        <input
+          type="text"
+          placeholder="Search groups by name, subject, or class..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          style={{ border: 'none', background: 'transparent', outline: 'none', flex: 1, color: 'var(--text-primary)' }}
+          className="w-full pl-10 pr-4 py-2.5 bg-white border border-neutral-200/90 rounded-xl text-xs font-medium text-neutral-900 focus:outline-none focus:ring-2 focus:ring-[#e05934] transition-all"
         />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(420px, 1fr))', gap: 24 }}>
-        {loading ? (
-          <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-secondary)', gridColumn: '1 / -1' }}>Loading groups...</div>
-        ) : filteredGroups.length === 0 ? (
-          <Card padding="48px" style={{ gridColumn: '1 / -1', textAlign: 'center' }}>
-            <Users size={48} style={{ margin: '0 auto 16px', opacity: 0.2, color: 'var(--text-primary)' }} />
-            <h3 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8, color: 'var(--text-primary)' }}>No Groups Found</h3>
-            <p style={{ color: 'var(--text-secondary)', marginBottom: 24 }}>
-              {search ? 'Try adjusting your search criteria.' : 'Create your first group to start managing students.'}
-            </p>
-            {!search && (
-              <button 
-                onClick={() => router.push('/teacher/groups/create')}
-                style={{ 
-                  display: 'inline-flex', alignItems: 'center', gap: 8, 
-                  background: 'var(--brand)', color: 'white', 
-                  border: 'none', padding: '10px 24px', borderRadius: '12px',
-                  fontWeight: 600, cursor: 'pointer'
-                }}
-              >
-                <Plus size={18} /> Create First Group
-              </button>
-            )}
-          </Card>
-        ) : (
-          filteredGroups.map((group) => (
-            <Card key={group.id} padding="24px" style={{ position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 260 }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-                <div style={{ 
-                  width: 48, height: 48, borderRadius: 14, 
-                  background: group.color || '#F3F4F6', 
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 
-                }}>
-                  <Users size={22} color={group.iconColor || '#6B7280'} />
-                </div>
-                
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <span style={{ background: 'var(--surface-hover)', border: '1px solid var(--border)', borderRadius: 100, padding: '3px 10px', fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', letterSpacing: '0.06em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
-                    {group.subject || 'GENERAL'}
+      {/* Main Grid */}
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="skeleton h-44 rounded-2xl" />
+          ))}
+        </div>
+      ) : filteredGroups.length === 0 ? (
+        <div className="p-12 text-center rounded-2xl bg-white border border-neutral-200/90 shadow-xs flex flex-col items-center">
+          <Users className="w-10 h-10 text-neutral-300 mb-3" />
+          <h3 className="text-base font-bold text-neutral-800">No Groups Found</h3>
+          <p className="text-xs text-neutral-400 mt-1 max-w-sm">
+            {search
+              ? 'No groups match your search criteria.'
+              : 'Create your first student study group to collaborate and assign focused tests.'}
+          </p>
+          <Link
+            href="/teacher/groups/create"
+            className="mt-5 px-5 py-2.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-bold transition-all flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Create Study Group</span>
+          </Link>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {filteredGroups.map((group, idx) => (
+            <motion.div
+              key={group.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.03 }}
+              className="rounded-2xl border border-neutral-200/90 bg-white p-5 shadow-xs hover:border-neutral-300 transition-all flex flex-col justify-between gap-4"
+            >
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-md bg-orange-50 text-[#e05934] border border-orange-100">
+                    {group.subject || 'General'}
                   </span>
-                  <button 
-                    onClick={() => handleDelete(group.id)}
-                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 4, color: 'var(--error)', display: 'flex', alignItems: 'center' }}
-                    title="Delete Group"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => handleDelete(group.id)}
+                      className="p-1 rounded-lg hover:bg-rose-50 text-neutral-400 hover:text-rose-600 transition-colors"
+                      title="Delete Group"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-              
-              <div style={{ marginTop: 16, flex: 1 }}>
-                <h2 style={{ margin: '0 0 8px', fontSize: 17, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.2 }}>{group.name}</h2>
-                <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500, lineHeight: 1.6, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: 62 }}>
-                  {group.description || 'No description added yet.'}
+
+                <h3 className="text-base font-bold text-neutral-900">{group.name}</h3>
+                <p className="text-xs text-neutral-500 line-clamp-2 mt-1 font-medium">
+                  {group.description || 'Targeted project group for active curriculum study and reviews.'}
                 </p>
               </div>
-              
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>
-                  <Users size={14} style={{ color: 'var(--text-tertiary)' }} />
-                  <span>{group.students} Members</span>
+
+              <div className="pt-3 border-t border-neutral-100 flex items-center justify-between text-xs text-neutral-500 font-medium">
+                <div className="flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-neutral-400" />
+                  <span className="font-bold text-neutral-800">{group.students || 0} Students</span>
                 </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button 
-                    onClick={() => router.push(`/teacher/groups/${group.id}/edit`)}
-                    style={{ height: 36, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-primary)', fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: '0 12px', display: 'flex', alignItems: 'center', gap: 6, transition: 'all .15s' }}
-                  >
-                    <Settings size={14} /> Manage
-                  </button>
-                  <button
-                    onClick={() => router.push(`/teacher/groups/${group.id}/discussion`)}
-                    style={{ height: 36, borderRadius: 10, border: 'none', background: 'var(--brand)', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: '0 18px', transition: 'all .15s' }}
-                  >
-                    Open Chat
-                  </button>
-                </div>
+                <span className="text-xs font-semibold text-neutral-500">{group.className || 'All Sections'}</span>
               </div>
-            </Card>
-          ))
-        )}
-      </div>
+            </motion.div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

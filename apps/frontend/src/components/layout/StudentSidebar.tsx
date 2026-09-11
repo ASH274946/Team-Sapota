@@ -23,6 +23,9 @@ import {
   PanelLeftOpen,
   ChevronDown,
   ChevronRight,
+  Calendar,
+  Award,
+  Zap,
 } from 'lucide-react';
 import { useSidebarStore } from '@/store/sidebar.store';
 import { useAuthStore } from '@/store/auth.store';
@@ -47,8 +50,9 @@ export function StudentSidebar() {
   const pathname = usePathname();
   const { isOpen, close, isCollapsed, toggleCollapsed } = useSidebarStore();
   const { user } = useAuthStore();
-  const [assessmentCount, setAssessmentCount] = useState<number | null>(null);
+  const [isCommunityOpen, setIsCommunityOpen] = useState(false);
   const [communityExpanded, setCommunityExpanded] = useState(() => pathname.startsWith('/student/community'));
+  const [assessmentCount, setAssessmentCount] = useState<number | null>(null);
 
   function isActive(href: string, exact = false) {
     if (exact) return pathname === href;
@@ -92,16 +96,19 @@ export function StudentSidebar() {
       ],
     },
     {
-      title: 'ACADEMICS',
+      title: 'LEARNING & MASTERY',
       items: [
-        { href: '/student/attendance', label: 'Attendance', icon: User },
-        { href: '/student/practice', label: 'Practice Quiz', icon: BookOpen },
+        { href: '/student/lessons', label: 'Learning Modules', icon: BookOpen },
+        { href: '/student/study-plan', label: 'AI Study Plan', icon: Calendar },
+        { href: '/student/mastery', label: 'Concept Mastery', icon: Award },
+        { href: '/student/practice', label: 'Practice Quiz', icon: Zap },
         {
           href: '/student/tutor',
           label: 'AI Tutor',
           icon: MessageSquare,
           badge: { text: 'AI', variant: 'neutral' },
         },
+        { href: '/student/attendance', label: 'Attendance', icon: User },
       ],
     },
   ];

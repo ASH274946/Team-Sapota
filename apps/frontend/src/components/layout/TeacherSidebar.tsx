@@ -11,13 +11,17 @@ import {
   Users,
   FileText,
   Smartphone,
-  History,
   Sparkles,
   GraduationCap,
   FileCheck,
   Search,
   PanelLeftClose,
   PanelLeftOpen,
+  Target,
+  Bell,
+  BarChart3,
+  BookOpen,
+  CheckSquare,
 } from 'lucide-react';
 import { useSidebarStore } from '@/store/sidebar.store';
 import { useAuthStore } from '@/store/auth.store';
@@ -77,31 +81,33 @@ export function TeacherSidebar() {
           href: '/ai-toolkit',
           label: "AI Teacher's Toolkit",
           icon: Smartphone,
-          badge: { text: 'New', variant: 'neutral' },
+          badge: { text: 'AI', variant: 'neutral' },
         },
         {
           href: '/assignments',
-          label: 'Assignments',
+          label: 'Assignments & Exams',
           icon: FileText,
           badge: assignmentCount !== null ? { text: String(assignmentCount).padStart(2, '0'), variant: 'amber' } : undefined,
         },
+        { href: '/teacher/announcements', label: 'Announcements', icon: Bell },
       ],
     },
     {
       title: 'ACADEMICS',
       items: [
         { href: '/teacher/groups', label: 'My Groups', icon: Users },
+        { href: '/teacher/obe', label: 'Curriculum & OBE', icon: Target },
         { href: '/teacher/attendance', label: 'Attendance', icon: GraduationCap },
         { href: '/teacher/leave', label: 'Leave Requests', icon: FileCheck },
-        { href: '/teacher/insights', label: 'Class Insights', icon: LayoutGrid },
-        { href: '/grader', label: 'Evaluations', icon: FileCheck },
+        { href: '/teacher/insights', label: 'Class Insights', icon: BarChart3 },
+        { href: '/grader', label: 'Evaluations', icon: CheckSquare },
       ],
     },
     {
-      title: 'RESOURCES',
+      title: 'RESOURCES & COPILOT',
       items: [
         { href: '/teacher/copilot', label: 'AI Copilot', icon: Sparkles },
-        { href: '/teacher/library', label: 'My Library', icon: History },
+        { href: '/teacher/library', label: 'Resource Library', icon: BookOpen },
       ],
     },
   ];

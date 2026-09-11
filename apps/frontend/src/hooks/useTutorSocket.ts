@@ -12,7 +12,7 @@ import type {
   TutorSourcesPayload,
 } from '@/types/socket.types';
 
-const TUTOR_SOCKET_TIMEOUT_MS = 4_000;
+const TUTOR_SOCKET_TIMEOUT_MS = 1_500;
 
 interface TutorSocketCallbacks {
   onStreamComplete?: (message: TutorMessage) => void;

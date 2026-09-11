@@ -271,7 +271,7 @@ export default function StudentLessonsPage() {
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.03 }}
-                onClick={() => router.push(`/lessons/${lesson.id}`)}
+                onClick={() => router.push(`/student/lessons/${lesson.id}`)}
                 className="bg-white rounded-2xl p-6 border border-neutral-200/90 shadow-xs flex flex-col justify-between hover:border-neutral-300 hover:shadow-sm transition-all cursor-pointer group"
               >
                 <div>

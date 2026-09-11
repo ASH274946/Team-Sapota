@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { useAssignments } from '@/hooks/useAssignments';
 import { deleteAssignment as deleteAssignmentRequest } from '@/services/assignment.service';
+import { api } from '@/lib/api';
 import type { Assignment } from '@/types/assignment.types';
 
 function StatusBadge({ status }: { status: Assignment['status'] }) {
@@ -272,9 +273,9 @@ export default function PapersPage() {
   const handleDownload = async (assignmentId: string) => {
     setDownloadingId(assignmentId);
     try {
-      const res = await fetch(`http://localhost:3001/api/v1/papers/${assignmentId}/pdf`);
-      if (!res.ok) throw new Error('PDF not available');
-      const blob = await res.blob();
+      const res = await api.get(`/papers/${assignmentId}/pdf`, { responseType: 'blob' });
+      if (!res.data) throw new Error('PDF not available');
+      const blob = new Blob([res.data], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;

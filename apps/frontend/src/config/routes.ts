@@ -15,6 +15,7 @@ export const ROUTES = {
     KNOWLEDGE_BASE: '/super-admin/knowledge',
     USERS: '/super-admin/users',
     ORGANIZATIONS: '/super-admin/organizations',
+    SUBSCRIPTIONS: '/super-admin/subscriptions',
     SETTINGS: '/super-admin/settings',
     AUDIT: '/super-admin/audit',
     ANALYTICS: '/super-admin/analytics'

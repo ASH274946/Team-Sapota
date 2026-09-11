@@ -1,26 +1,22 @@
 'use client';
-import { NativeSelect } from '@/components/ui/native-select';
-
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { 
+import {
   Upload,
   UserPlus,
-  ChevronDown,
   Building,
-  Calendar,
   X,
   Search,
   MoreVertical,
-  Zap
+  Users,
+  CheckCircle2,
 } from 'lucide-react';
-import { Card } from '@/design-system/Card';
-import { LoadingState } from '@/design-system/LoadingState';
-import { ErrorState } from '@/design-system/ErrorState';
 import { api } from '@/lib/api';
 import { formatDistanceToNow } from 'date-fns';
 import { useUserFilters } from '@/hooks/useUserFilters';
 import { Pagination } from '@/components/ui/Pagination';
+import { NativeSelect } from '@/components/ui/native-select';
+import toast from 'react-hot-toast';
 
 interface UnifiedUser {
   id: string;
@@ -40,8 +36,17 @@ interface DirectoryData {
     inactiveUsers: number;
     crossOrgEngagement: number;
     orgBreakdown: { name: string; count: number; id: string | null; code: string }[];
-  }
+  };
 }
+
+const ROLE_STYLES: Record<string, { bg: string; color: string; label: string }> = {
+  TEACHER: { bg: 'bg-amber-50 text-amber-700 border-amber-200', color: 'text-amber-700', label: 'Faculty' },
+  FACULTY: { bg: 'bg-amber-50 text-amber-700 border-amber-200', color: 'text-amber-700', label: 'Faculty' },
+  ORG_ADMIN: { bg: 'bg-purple-50 text-purple-700 border-purple-200', color: 'text-purple-700', label: 'Org Admin' },
+  ADMIN: { bg: 'bg-purple-50 text-purple-700 border-purple-200', color: 'text-purple-700', label: 'Admin' },
+  STUDENT: { bg: 'bg-emerald-50 text-emerald-700 border-emerald-200', color: 'text-emerald-700', label: 'Student' },
+  SUPER_ADMIN: { bg: 'bg-rose-50 text-rose-700 border-rose-200', color: 'text-rose-700', label: 'Super Admin' },
+};
 
 export default function GlobalUsersDirectory() {
   const [data, setData] = useState<DirectoryData | null>(null);
@@ -52,7 +57,6 @@ export default function GlobalUsersDirectory() {
   const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
   const [isNewUserOpen, setIsNewUserOpen] = useState(false);
   const [activeActionMenu, setActiveActionMenu] = useState<string | null>(null);
-  const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
 
   // New User Form State
   const [newUserForm, setNewUserForm] = useState({
@@ -74,21 +78,27 @@ export default function GlobalUsersDirectory() {
 
   // Filters
   const {
-    roleFilter, setRoleFilter,
-    orgFilter, setOrgFilter,
-    statusFilter, setStatusFilter,
-    periodFilter, setPeriodFilter,
-    searchQuery, setSearchQuery,
-    sortField, setSortField,
-    sortOrder, setSortOrder,
+    roleFilter,
+    setRoleFilter,
+    orgFilter,
+    setOrgFilter,
+    statusFilter,
+    setStatusFilter,
+    periodFilter,
+    setPeriodFilter,
+    searchQuery,
+    setSearchQuery,
+    sortField,
+    setSortField,
+    sortOrder,
+    setSortOrder,
     clearFilters,
-    filteredUsers
+    filteredUsers,
   } = useUserFilters(data?.users || []);
-  // Pagination
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
 
-  // Reset to page 1 when filters or sort change
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 12;
+
   useEffect(() => {
     setCurrentPage(1);
   }, [roleFilter, orgFilter, statusFilter, periodFilter, searchQuery, sortField, sortOrder]);
@@ -107,7 +117,7 @@ export default function GlobalUsersDirectory() {
 
   useEffect(() => {
     fetchDirectoryData();
-    const interval = setInterval(fetchDirectoryData, 10000); // Polling every 10s
+    const interval = setInterval(fetchDirectoryData, 15000);
     return () => clearInterval(interval);
   }, [fetchDirectoryData]);
 
@@ -116,12 +126,13 @@ export default function GlobalUsersDirectory() {
       setIsCreatingUser(true);
       setCreateUserError(null);
       await api.post('/admin/users', newUserForm);
+      toast.success('User identity created');
       setIsNewUserOpen(false);
       setNewUserForm({ firstName: '', lastName: '', email: '', role: 'STUDENT', organizationId: '' });
       setIsEmailManuallyEdited(false);
-      fetchDirectoryData(); // Refresh list
+      fetchDirectoryData();
     } catch (err: any) {
-      setCreateUserError(err.message || 'Failed to create user');
+      setCreateUserError(err.response?.data?.error || err.message || 'Failed to create user');
     } finally {
       setIsCreatingUser(false);
     }
@@ -129,60 +140,100 @@ export default function GlobalUsersDirectory() {
 
   const handleBulkImport = async () => {
     if (!importFile) {
-      setImportError('Please select a file to import.');
+      setImportError('Please select a CSV file to import.');
       return;
     }
     try {
       setIsImporting(true);
       setImportError(null);
-      
       const formData = new FormData();
       formData.append('file', importFile);
-      
-      // Need to post as multipart/form-data
       const res = await api.post('/admin/users/import', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
-      
-      setImportResult(res.data || res);
+      setImportResult(res.data?.data || res.data);
+      toast.success('Bulk import finished');
       fetchDirectoryData();
     } catch (err: any) {
-      setImportError(err.message || 'Import failed');
+      setImportError(err.response?.data?.error || err.message || 'Import failed');
     } finally {
       setIsImporting(false);
+    }
+  };
+
+  const handleToggleSuspendUser = async (u: UnifiedUser) => {
+    setActiveActionMenu(null);
+    const isSuspended = u.status === 'SUSPENDED';
+    if (!confirm(`Are you sure you want to ${isSuspended ? 'activate' : 'suspend'} ${u.firstName} ${u.lastName} (${u.email})?`)) return;
+    try {
+      await api.put(`/admin/users/${u.id}/suspend`, { suspend: !isSuspended });
+      toast.success(`User ${isSuspended ? 'activated' : 'suspended'} successfully.`);
+      fetchDirectoryData();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || err.message || 'Failed to update user status');
+    }
+  };
+
+  const handleResetPassword = async (u: UnifiedUser) => {
+    setActiveActionMenu(null);
+    if (!confirm(`Generate a temporary password reset for ${u.firstName} ${u.lastName}?`)) return;
+    try {
+      const res = await api.post(`/admin/users/${u.id}/reset-password`);
+      const tempPass = res.data?.data?.tempPassword || res.data?.tempPassword;
+      if (tempPass) {
+        toast.success(`Temporary password: ${tempPass}`, { duration: 10000 });
+      } else {
+        toast.success('Password reset initiated successfully.');
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || err.message || 'Password reset failed');
+    }
+  };
+
+  const handleDeleteUser = async (u: UnifiedUser) => {
+    setActiveActionMenu(null);
+    if (!confirm(`Permanently remove ${u.firstName} ${u.lastName} (${u.email})? This action cannot be undone.`)) return;
+    try {
+      await api.delete(`/admin/users/${u.id}`);
+      toast.success('User removed successfully.');
+      fetchDirectoryData();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || err.message || 'Delete user failed');
     }
   };
 
   useEffect(() => {
     if (isEmailManuallyEdited) return;
     if (!newUserForm.firstName && !newUserForm.lastName) {
-      setNewUserForm(prev => ({ ...prev, email: '' }));
+      setNewUserForm((prev) => ({ ...prev, email: '' }));
       return;
     }
-    
-    let domain = 'vidya.ai'; // default domain
-    
+    let domain = 'vidya.ai';
     if (newUserForm.organizationId && data?.stats?.orgBreakdown) {
-      const org = data.stats.orgBreakdown.find(o => o.id === newUserForm.organizationId);
+      const org = data.stats.orgBreakdown.find((o) => o.id === newUserForm.organizationId);
       if (org && org.code) {
         domain = org.code.toLowerCase() + '.com';
       } else if (org && org.name) {
         domain = org.name.toLowerCase().replace(/[^a-z0-9]/g, '') + '.com';
       }
     }
-    
     const first = newUserForm.firstName.toLowerCase().replace(/[^a-z0-9]/g, '');
     const last = newUserForm.lastName.toLowerCase().replace(/[^a-z0-9]/g, '');
-    
     let emailPrefix = '';
     if (first && last) emailPrefix = `${first}${last}`;
     else if (first) emailPrefix = first;
     else if (last) emailPrefix = last;
-    
+
     if (emailPrefix) {
-      setNewUserForm(prev => ({ ...prev, email: `${emailPrefix}@${domain}` }));
+      setNewUserForm((prev) => ({ ...prev, email: `${emailPrefix}@${domain}` }));
     }
-  }, [newUserForm.firstName, newUserForm.lastName, newUserForm.organizationId, data?.stats?.orgBreakdown, isEmailManuallyEdited]);
+  }, [
+    newUserForm.firstName,
+    newUserForm.lastName,
+    newUserForm.organizationId,
+    data?.stats?.orgBreakdown,
+    isEmailManuallyEdited,
+  ]);
 
   const paginatedUsers = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
@@ -191,477 +242,381 @@ export default function GlobalUsersDirectory() {
 
   const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
 
-  if (isLoading && !data) return <LoadingState lines={8} />;
-  if (error && !data) return <ErrorState message={error} onRetry={fetchDirectoryData} />;
-
-  const getInitials = (f: string, l: string) => `${f?.[0]||''}${l?.[0]||''}`.toUpperCase();
+  const getInitials = (f: string, l: string) => `${f?.[0] || ''}${l?.[0] || ''}`.toUpperCase();
 
   const getRoleStyle = (role: string, status: string) => {
-    if (status === 'SUSPENDED') return { bg: '#FEE2E2', color: '#DC2626', label: 'Suspended' };
-    if (role === 'TEACHER') return { bg: '#F3F4F6', color: '#4B5563', label: 'Faculty' };
-    if (role === 'ORG_ADMIN') return { bg: '#FFF7ED', color: '#EA580C', label: 'Org Admin' };
-    if (role === 'STUDENT') return { bg: '#F3F4F6', color: '#4B5563', label: 'Student' };
-    if (role === 'SUPER_ADMIN') return { bg: '#EFF6FF', color: '#3B82F6', label: 'Super Admin' };
-    return { bg: '#F3F4F6', color: '#4B5563', label: role };
+    if (status === 'SUSPENDED') {
+      return { bg: 'bg-rose-50 text-rose-700 border-rose-200', color: 'text-rose-700', label: 'Suspended' };
+    }
+    return ROLE_STYLES[role] || { bg: 'bg-neutral-100 text-neutral-700 border-neutral-200', color: 'text-neutral-700', label: role };
   };
 
-  const { stats } = data || { stats: { activeUsers: 0, inactiveUsers: 0, crossOrgEngagement: 0, orgBreakdown: [] } };
-
-  // Calculate dynamic bar chart heights (max 120px)
-  const totalBarCount = stats.activeUsers + stats.inactiveUsers;
-  const activeHeight = totalBarCount > 0 ? (stats.activeUsers / totalBarCount) * 120 : 0;
-  const inactiveHeight = totalBarCount > 0 ? (stats.inactiveUsers / totalBarCount) * 120 : 0;
+  const { stats } = data || {
+    stats: { activeUsers: 0, inactiveUsers: 0, crossOrgEngagement: 0, orgBreakdown: [] },
+  };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 1200, margin: '0 auto', width: '100%', paddingBottom: 48 }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <div style={{ fontSize: 13, color: '#6B7280', fontWeight: 600 }}>Directory / <span style={{ color: '#111827' }}>Global Users</span></div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div>
-            <h1 style={{ fontSize: 28, fontWeight: 800, color: '#111827', margin: '4px 0 8px 0' }}>Global User Directory</h1>
-            <p style={{ fontSize: 14, color: '#6B7280', margin: 0, maxWidth: 600, lineHeight: 1.5 }}>
-              Manage cross-ecosystem identities, synchronize permissions, and audit activity across all organizations within the Vidya AI network.
-            </p>
-          </div>
-          <div style={{ display: 'flex', gap: 12 }}>
-            <button 
-              onClick={() => setIsBulkImportOpen(true)}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 99, padding: '10px 24px', fontSize: 14, fontWeight: 600, color: '#374151', cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-              <Upload size={16} /> Bulk Import
-            </button>
-            <button 
-              onClick={() => setIsNewUserOpen(true)}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#F97316', border: 'none', borderRadius: 99, padding: '10px 24px', fontSize: 14, fontWeight: 600, color: '#FFFFFF', cursor: 'pointer', boxShadow: '0 4px 14px rgba(249, 115, 22, 0.3)' }}>
-              <UserPlus size={16} /> New User
-            </button>
-          </div>
+    <div className="max-w-[1600px] mx-auto text-slate-900 font-sans flex flex-col gap-6">
+      {/* Top Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-extrabold text-neutral-900 tracking-tight">
+            Global User Directory
+          </h1>
+          <p className="text-xs md:text-sm text-neutral-500 font-medium mt-1">
+            Manage multi-tenant identity directory, credential policies, and cross-ecosystem synchronization
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsBulkImportOpen(true)}
+            className="px-4 py-2.5 rounded-xl border border-neutral-200/90 bg-white hover:bg-neutral-50 text-neutral-800 text-xs font-bold transition-all shadow-2xs flex items-center gap-2"
+          >
+            <Upload className="w-4 h-4" />
+            <span>Bulk CSV Import</span>
+          </button>
+          <button
+            onClick={() => setIsNewUserOpen(true)}
+            className="px-4 py-2.5 rounded-xl bg-[#e05934] hover:bg-[#c94a2a] text-white text-xs font-bold transition-all shadow-xs flex items-center gap-2"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>New User Identity</span>
+          </button>
         </div>
       </div>
 
       {/* Filter and Search Bar */}
-      <Card padding="16px" style={{ display: 'flex', flexDirection: 'column', gap: 16, background: '#FFFFFF', borderRadius: 16, overflow: 'visible' }}>
-        
-        {/* Filters Row (Grid) */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, alignItems: 'end' }}>
-          
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, position: 'relative' }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: '#6B7280' }}>Role</label>
-            <div 
-              onClick={() => setActiveDropdown(activeDropdown === 'role' ? null : 'role')}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', border: '1px solid #E5E7EB', borderRadius: 8, background: '#F9FAFB', cursor: 'pointer', width: '100%' }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151', flex: 1 }}>{roleFilter}</span>
-              <ChevronDown size={14} color="#9CA3AF" />
-            </div>
-            {activeDropdown === 'role' && (
-              <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: '#FFF', border: '1px solid #E5E7EB', borderRadius: 8, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', zIndex: 50, minWidth: '100%' }}>
-                {['All Roles', 'Student', 'Faculty', 'Org Admin', 'Super Admin'].map(r => (
-                  <div key={r} onClick={() => { setRoleFilter(r); setActiveDropdown(null); setCurrentPage(1); }} style={{ padding: '8px 12px', fontSize: 13, cursor: 'pointer', color: '#374151', borderBottom: '1px solid #F3F4F6' }}>{r}</div>
-                ))}
-              </div>
-            )}
+      <div className="rounded-2xl border border-neutral-200/90 bg-white p-5 shadow-xs space-y-4">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 items-center">
+          <div>
+            <label className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider block mb-1">
+              Role
+            </label>
+            <NativeSelect
+              value={roleFilter}
+              onChange={(e) => {
+                setRoleFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200/90 rounded-xl text-xs font-bold text-neutral-800"
+            >
+              <option value="All Roles">All Roles</option>
+              <option value="Student">Student</option>
+              <option value="Faculty">Faculty</option>
+              <option value="Org Admin">Org Admin</option>
+              <option value="Super Admin">Super Admin</option>
+            </NativeSelect>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, position: 'relative' }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: '#6B7280' }}>Organization</label>
-            <div 
-              onClick={() => setActiveDropdown(activeDropdown === 'org' ? null : 'org')}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', border: '1px solid #E5E7EB', borderRadius: 8, background: '#F9FAFB', cursor: 'pointer', width: '100%' }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{orgFilter}</span>
-              <ChevronDown size={14} color="#9CA3AF" />
-            </div>
-            {activeDropdown === 'org' && (
-              <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: '#FFF', border: '1px solid #E5E7EB', borderRadius: 8, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', zIndex: 50, minWidth: '100%', maxHeight: 200, overflowY: 'auto' }}>
-                {['All Organizations', ...(stats?.orgBreakdown.map((o: any) => o.name) || []), 'Unknown'].map(o => (
-                  <div key={o} onClick={() => { setOrgFilter(o); setActiveDropdown(null); setCurrentPage(1); }} style={{ padding: '8px 12px', fontSize: 13, cursor: 'pointer', color: '#374151', borderBottom: '1px solid #F3F4F6' }}>{o}</div>
-                ))}
-              </div>
-            )}
+          <div>
+            <label className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider block mb-1">
+              Organization
+            </label>
+            <NativeSelect
+              value={orgFilter}
+              onChange={(e) => {
+                setOrgFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200/90 rounded-xl text-xs font-bold text-neutral-800"
+            >
+              <option value="All Organizations">All Organizations</option>
+              {stats?.orgBreakdown.map((o) => (
+                <option key={o.name} value={o.name}>
+                  {o.name}
+                </option>
+              ))}
+            </NativeSelect>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, position: 'relative' }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: '#6B7280' }}>Status</label>
-            <div 
-              onClick={() => setActiveDropdown(activeDropdown === 'status' ? null : 'status')}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', border: '1px solid #E5E7EB', borderRadius: 8, background: '#F9FAFB', cursor: 'pointer', width: '100%' }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151', flex: 1 }}>{statusFilter}</span>
-              <ChevronDown size={14} color="#9CA3AF" />
-            </div>
-            {activeDropdown === 'status' && (
-              <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: '#FFF', border: '1px solid #E5E7EB', borderRadius: 8, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', zIndex: 50, minWidth: '100%' }}>
-                {['All Statuses', 'Active Only', 'Suspended'].map(s => (
-                  <div key={s} onClick={() => { setStatusFilter(s); setActiveDropdown(null); setCurrentPage(1); }} style={{ padding: '8px 12px', fontSize: 13, cursor: 'pointer', color: '#374151', borderBottom: '1px solid #F3F4F6' }}>{s}</div>
-                ))}
-              </div>
-            )}
+          <div>
+            <label className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider block mb-1">
+              Status
+            </label>
+            <NativeSelect
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200/90 rounded-xl text-xs font-bold text-neutral-800"
+            >
+              <option value="All Statuses">All Statuses</option>
+              <option value="Active Only">Active</option>
+              <option value="Suspended">Suspended</option>
+            </NativeSelect>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, position: 'relative' }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: '#6B7280' }}>Activity Period</label>
-            <div 
-              onClick={() => setActiveDropdown(activeDropdown === 'period' ? null : 'period')}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', border: '1px solid #E5E7EB', borderRadius: 8, background: '#F9FAFB', cursor: 'pointer', width: '100%' }}>
-              <Calendar size={14} color="#6B7280" />
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151', flex: 1 }}>{periodFilter}</span>
-            </div>
-            {activeDropdown === 'period' && (
-              <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: '#FFF', border: '1px solid #E5E7EB', borderRadius: 8, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', zIndex: 50, minWidth: '100%' }}>
-                {['All Time', 'Last 30 Days', 'Last 7 Days'].map(p => (
-                  <div key={p} onClick={() => { setPeriodFilter(p); setActiveDropdown(null); setCurrentPage(1); }} style={{ padding: '8px 12px', fontSize: 13, cursor: 'pointer', color: '#374151', borderBottom: '1px solid #F3F4F6' }}>{p}</div>
-                ))}
-              </div>
-            )}
+          <div>
+            <label className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider block mb-1">
+              Activity
+            </label>
+            <NativeSelect
+              value={periodFilter}
+              onChange={(e) => {
+                setPeriodFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200/90 rounded-xl text-xs font-bold text-neutral-800"
+            >
+              <option value="All Time">All Time</option>
+              <option value="Last 30 Days">Last 30 Days</option>
+              <option value="Last 7 Days">Last 7 Days</option>
+            </NativeSelect>
           </div>
 
-          <button 
-            onClick={() => { clearFilters(); setCurrentPage(1); }}
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'transparent', border: 'none', color: '#D97706', fontSize: 13, fontWeight: 600, cursor: 'pointer', height: 38, justifySelf: 'start', gridColumn: 'auto' }}>
-            <X size={14} /> Clear Filters
-          </button>
+          <div className="col-span-2 sm:col-span-1 flex items-end">
+            <button
+              onClick={() => {
+                clearFilters();
+                setCurrentPage(1);
+              }}
+              className="w-full py-2 px-3 border border-neutral-200 rounded-xl text-xs font-bold text-neutral-600 hover:bg-neutral-50 flex items-center justify-center gap-1.5"
+            >
+              <X className="w-3.5 h-3.5" />
+              <span>Reset</span>
+            </button>
+          </div>
         </div>
 
-        {/* Search Row */}
-        <div style={{ width: '100%', position: 'relative' }}>
-          <div style={{ position: 'absolute', left: 12, top: 10, color: '#9CA3AF' }}>
-            <Search size={16} />
-          </div>
+        {/* Search Field */}
+        <div className="relative">
+          <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Search by name, email, role or organization..."
+            placeholder="Search by user name, email address, role, or institution code..."
             value={searchQuery}
-            onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-            style={{ 
-              width: '100%', 
-              padding: '10px 12px 10px 36px', 
-              border: '1px solid #E5E7EB', 
-              borderRadius: 8, 
-              fontSize: 14, 
-              outline: 'none',
-              background: '#F9FAFB'
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setCurrentPage(1);
             }}
+            className="w-full pl-10 pr-4 py-2.5 bg-neutral-50 border border-neutral-200/90 rounded-xl text-xs font-medium text-neutral-900 focus:outline-none focus:ring-2 focus:ring-[#e05934] transition-all"
           />
         </div>
-      </Card>
-
-      {/* Table */}
-      <Card padding="0" style={{ background: '#FFFFFF', borderRadius: 16, overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-          <thead>
-            <tr style={{ borderBottom: '1px solid #F3F4F6', background: '#F9FAFB' }}>
-              <th 
-                style={{ padding: '16px 24px', fontSize: 12, fontWeight: 700, color: '#6B7280', cursor: 'pointer' }}
-                onClick={() => { setSortOrder(sortField === 'name' && sortOrder === 'asc' ? 'desc' : 'asc'); setSortField('name'); }}
-              >
-                Name {sortField === 'name' ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
-              </th>
-              <th 
-                style={{ padding: '16px 24px', fontSize: 12, fontWeight: 700, color: '#6B7280', cursor: 'pointer' }}
-                onClick={() => { setSortOrder(sortField === 'role' && sortOrder === 'asc' ? 'desc' : 'asc'); setSortField('role'); }}
-              >
-                Role {sortField === 'role' ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
-              </th>
-              <th 
-                style={{ padding: '16px 24px', fontSize: 12, fontWeight: 700, color: '#6B7280', cursor: 'pointer' }}
-                onClick={() => { setSortOrder(sortField === 'organization' && sortOrder === 'asc' ? 'desc' : 'asc'); setSortField('organization'); }}
-              >
-                Assigned Organization {sortField === 'organization' ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
-              </th>
-              <th 
-                style={{ padding: '16px 24px', fontSize: 12, fontWeight: 700, color: '#6B7280', cursor: 'pointer' }}
-                onClick={() => { setSortOrder(sortField === 'lastActivity' && sortOrder === 'asc' ? 'desc' : 'asc'); setSortField('lastActivity'); }}
-              >
-                Last Activity {sortField === 'lastActivity' ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
-              </th>
-              <th style={{ padding: '16px 24px', fontSize: 12, fontWeight: 700, color: '#6B7280', textAlign: 'right' }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {paginatedUsers.length === 0 ? (
-              <tr>
-                <td colSpan={5} style={{ padding: '48px 24px', textAlign: 'center' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-                    <div style={{ width: 48, height: 48, background: '#F3F4F6', borderRadius: 99, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Search size={24} color="#9CA3AF" />
-                    </div>
-                    <div>
-                      <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#111827' }}>No users found</h3>
-                      <p style={{ margin: '4px 0 0 0', fontSize: 14, color: '#6B7280' }}>Try adjusting your filters or search query to find what you're looking for.</p>
-                    </div>
-                    <button 
-                      onClick={() => { clearFilters(); setCurrentPage(1); }}
-                      style={{ marginTop: 8, padding: '8px 16px', background: '#FFF', border: '1px solid #E5E7EB', borderRadius: 8, fontSize: 13, fontWeight: 600, color: '#374151', cursor: 'pointer' }}>
-                      Clear all filters
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              paginatedUsers.map((u, idx) => {
-                const roleStyle = getRoleStyle(u.role, u.status);
-                return (
-                  <tr key={u.id} style={{ borderBottom: idx === paginatedUsers.length - 1 ? 'none' : '1px solid #F3F4F6' }}>
-                    <td style={{ padding: '20px 24px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 99, background: '#F3F4F6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: '#111827' }}>
-                          {getInitials(u.firstName, u.lastName)}
-                        </div>
-                        <div>
-                          <div style={{ fontSize: 14, fontWeight: 600, color: '#111827', marginBottom: 2 }}>{u.firstName} {u.lastName}</div>
-                          <div style={{ fontSize: 13, color: '#6B7280' }}>{u.email}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td style={{ padding: '20px 24px' }}>
-                      <span style={{ 
-                        display: 'inline-block',
-                        padding: '4px 12px',
-                        background: roleStyle.bg,
-                        color: roleStyle.color,
-                        borderRadius: 99,
-                        fontSize: 12,
-                        fontWeight: 600
-                      }}>
-                        {roleStyle.label}
-                      </span>
-                    </td>
-                    <td style={{ padding: '20px 24px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <Building size={16} color="#D1D5DB" />
-                        <span style={{ fontSize: 13, fontWeight: 600, color: '#4B5563' }}>{u.institution}</span>
-                      </div>
-                    </td>
-                    <td style={{ padding: '20px 24px' }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: '#111827', marginBottom: 2 }}>
-                        {u.lastActivity ? formatDistanceToNow(new Date(u.lastActivity), { addSuffix: true }) : 'Never'}
-                      </div>
-                      {/* Mocked activity string for visual parity */}
-                      <div style={{ fontSize: 12, color: '#9CA3AF' }}>System Login</div>
-                    </td>
-                    <td style={{ padding: '20px 24px', textAlign: 'right', position: 'relative' }}>
-                      <button 
-                        onClick={() => setActiveActionMenu(activeActionMenu === u.id ? null : u.id)}
-                        style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#9CA3AF' }}>
-                        <MoreVertical size={20} />
-                      </button>
-                      {activeActionMenu === u.id && (
-                        <div style={{ position: 'absolute', right: 24, top: '100%', marginTop: -10, background: '#FFF', border: '1px solid #E5E7EB', borderRadius: 8, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', zIndex: 10, width: 140, textAlign: 'left' }}>
-                          <div onClick={() => setActiveActionMenu(null)} style={{ padding: '10px 16px', fontSize: 13, cursor: 'pointer', color: '#374151', borderBottom: '1px solid #F3F4F6' }}>View Profile</div>
-                          <div onClick={() => setActiveActionMenu(null)} style={{ padding: '10px 16px', fontSize: 13, cursor: 'pointer', color: '#374151', borderBottom: '1px solid #F3F4F6' }}>Reset Password</div>
-                          <div onClick={() => setActiveActionMenu(null)} style={{ padding: '10px 16px', fontSize: 13, cursor: 'pointer', color: '#DC2626' }}>Suspend User</div>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-
-        {/* Pagination Footer */}
-        <div style={{ padding: '16px 24px', borderTop: '1px solid #F3F4F6', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F9FAFB', gap: 16, flexWrap: 'wrap' }}>
-          <div style={{ fontSize: 13, color: '#6B7280', fontWeight: 500 }}>
-            {filteredUsers.length > 0 
-              ? `Showing ${(currentPage - 1) * itemsPerPage + 1} to ${Math.min(currentPage * itemsPerPage, filteredUsers.length)} of ${filteredUsers.length.toLocaleString()} users`
-              : 'Showing 0 users'}
-          </div>
-          <div style={{ maxWidth: 300 }}>
-            <Pagination
-              totalPages={totalPages || 1}
-              value={currentPage}
-              onChange={setCurrentPage}
-            />
-          </div>
-        </div>
-      </Card>
-
-      {/* Bottom Cards Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.5fr', gap: 24 }}>
-        
-        {/* Active vs Inactive Chart Card */}
-        <Card padding="24px" style={{ background: '#FFFFFF', borderRadius: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
-            <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: '#374151' }}>Active vs. Inactive</h3>
-            <Zap size={16} color="#D97706" />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, height: 120, marginBottom: 24 }}>
-            <div style={{ flex: 1, background: '#000000', borderRadius: '4px 4px 0 0', height: `${Math.max(activeHeight, 20)}%` }} />
-            <div style={{ flex: 1, background: '#E5E7EB', borderRadius: '4px 4px 0 0', height: `${Math.max(inactiveHeight, 10)}%` }} />
-            <div style={{ flex: 1, background: '#000000', borderRadius: '4px 4px 0 0', height: '60%' }} />
-            <div style={{ flex: 1, background: '#E5E7EB', borderRadius: '4px 4px 0 0', height: '30%' }} />
-            <div style={{ flex: 1, background: '#000000', borderRadius: '4px 4px 0 0', height: '90%' }} />
-          </div>
-          <div style={{ fontSize: 14, fontWeight: 600, color: '#6B7280' }}>
-            Cross-Org Engagement: <span style={{ color: '#D97706', fontWeight: 800 }}>{stats.crossOrgEngagement}%</span>
-          </div>
-        </Card>
-
-        {/* Org Breakdown Card */}
-        <Card padding="24px" style={{ background: '#FFFFFF', borderRadius: 16, display: 'flex', flexDirection: 'column' }}>
-          <h3 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 24px 0', color: '#374151' }}>Org Breakdown</h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, flex: 1 }}>
-            {stats.orgBreakdown.map((org, idx) => {
-              const maxCount = Math.max(...stats.orgBreakdown.map(o => o.count));
-              const width = Math.max((org.count / maxCount) * 100, 10);
-              return (
-                <div key={idx}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 8 }}>
-                    <span>{org.name}</span>
-                    <span>{org.count.toLocaleString()}</span>
-                  </div>
-                  <div style={{ width: '100%', height: 4, background: '#F3F4F6', borderRadius: 99 }}>
-                    <div style={{ width: `${width}%`, height: '100%', background: idx === 0 ? '#000000' : '#D97706', borderRadius: 99 }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          <button style={{ alignSelf: 'flex-start', background: 'transparent', border: 'none', color: '#6B7280', fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0, marginTop: 16 }}>
-            View full org audit →
-          </button>
-        </Card>
-
-        {/* AI Toolkit Notice */}
-        <Card padding="24px" style={{ background: '#FFF7ED', borderRadius: 16, border: '1px solid #FED7AA', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-            <Zap size={18} color="#D97706" />
-            <span style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>AI Toolkit Notice</span>
-          </div>
-          <p style={{ fontSize: 14, color: '#4B5563', lineHeight: 1.6, margin: '0 0 24px 0', flex: 1 }}>
-            Automated anomaly detection found 3 user accounts with inconsistent permission hierarchies across Stanford and MIT organizations.
-          </p>
-          <button style={{ background: '#000000', color: '#FFFFFF', border: 'none', borderRadius: 8, padding: '12px', fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-            <Zap size={16} color="#D97706" /> Resolve with AI Assistant
-          </button>
-        </Card>
-
       </div>
 
-      {/* Bulk Import Modal */}
-      {isBulkImportOpen && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#FFF', borderRadius: 16, width: '100%', maxWidth: 480, padding: 32, display: 'flex', flexDirection: 'column', gap: 24, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
-            <div>
-              <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0, marginBottom: 8, color: '#111827' }}>Bulk Import Users</h2>
-              <p style={{ fontSize: 14, color: '#6B7280', margin: 0 }}>Upload a CSV file to create multiple users at once.</p>
-            </div>
-            
-            <div style={{ position: 'relative', border: '2px dashed #E5E7EB', borderRadius: 12, padding: 48, textAlign: 'center', background: '#F9FAFB', cursor: 'pointer' }}>
-              <input 
-                type="file" 
-                accept=".csv,.xlsx" 
-                onChange={(e) => {
-                  if (e.target.files && e.target.files.length > 0) {
-                    setImportFile(e.target.files[0]);
-                    setImportError(null);
-                    setImportResult(null);
-                  }
-                }}
-                style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
-              />
-              <Upload size={24} color="#9CA3AF" style={{ marginBottom: 12 }} />
-              <div style={{ fontSize: 14, fontWeight: 600, color: '#374151', marginBottom: 4 }}>
-                {importFile ? importFile.name : 'Click to upload or drag and drop'}
-              </div>
-              <div style={{ fontSize: 12, color: '#6B7280' }}>CSV or XLSX files only, max 5MB</div>
-            </div>
+      {/* Main Table */}
+      <div className="rounded-2xl border border-neutral-200/90 bg-white shadow-xs overflow-hidden">
+        {isLoading ? (
+          <div className="p-8 space-y-3">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="skeleton h-14 rounded-xl" />
+            ))}
+          </div>
+        ) : paginatedUsers.length === 0 ? (
+          <div className="p-12 text-center flex flex-col items-center">
+            <Users className="w-10 h-10 text-neutral-300 mb-2" />
+            <h4 className="text-sm font-bold text-neutral-800">No Users Matching Criteria</h4>
+            <p className="text-xs text-neutral-400 mt-1 max-w-sm">
+              Try adjusting your filter settings or search query to find accounts.
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-neutral-100 bg-neutral-50/50 text-[11px] font-bold uppercase tracking-wider text-neutral-400">
+                  <th
+                    className="py-3.5 px-6 cursor-pointer hover:text-neutral-700"
+                    onClick={() => {
+                      setSortOrder(sortField === 'name' && sortOrder === 'asc' ? 'desc' : 'asc');
+                      setSortField('name');
+                    }}
+                  >
+                    User Profile {sortField === 'name' ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
+                  </th>
+                  <th
+                    className="py-3.5 px-6 cursor-pointer hover:text-neutral-700"
+                    onClick={() => {
+                      setSortOrder(sortField === 'role' && sortOrder === 'asc' ? 'desc' : 'asc');
+                      setSortField('role');
+                    }}
+                  >
+                    Role {sortField === 'role' ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
+                  </th>
+                  <th
+                    className="py-3.5 px-6 cursor-pointer hover:text-neutral-700"
+                    onClick={() => {
+                      setSortOrder(sortField === 'organization' && sortOrder === 'asc' ? 'desc' : 'asc');
+                      setSortField('organization');
+                    }}
+                  >
+                    Organization {sortField === 'organization' ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
+                  </th>
+                  <th
+                    className="py-3.5 px-6 cursor-pointer hover:text-neutral-700"
+                    onClick={() => {
+                      setSortOrder(sortField === 'lastActivity' && sortOrder === 'asc' ? 'desc' : 'asc');
+                      setSortField('lastActivity');
+                    }}
+                  >
+                    Last Activity {sortField === 'lastActivity' ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
+                  </th>
+                  <th className="py-3.5 px-6 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-100">
+                {paginatedUsers.map((u) => {
+                  const roleStyle = getRoleStyle(u.role, u.status);
+                  return (
+                    <tr key={u.id} className="hover:bg-neutral-50/60 transition-colors">
+                      <td className="py-3.5 px-6">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-neutral-900 text-white font-extrabold text-xs flex items-center justify-center shrink-0">
+                            {getInitials(u.firstName, u.lastName)}
+                          </div>
+                          <div>
+                            <div className="font-bold text-neutral-900">
+                              {u.firstName} {u.lastName}
+                            </div>
+                            <div className="text-neutral-400 text-[11px] font-medium">{u.email}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-6">
+                        <span
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${roleStyle.bg}`}
+                        >
+                          {roleStyle.label}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-6">
+                        <div className="flex items-center gap-1.5 text-neutral-700 font-semibold">
+                          <Building className="w-3.5 h-3.5 text-neutral-400" />
+                          <span>{u.institution}</span>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-6 text-neutral-500 font-medium">
+                        {u.lastActivity
+                          ? formatDistanceToNow(new Date(u.lastActivity), { addSuffix: true })
+                          : 'Never'}
+                      </td>
+                      <td className="py-3.5 px-6 text-right">
+                        <div className="relative inline-block text-left">
+                          <button
+                            onClick={() => setActiveActionMenu(activeActionMenu === u.id ? null : u.id)}
+                            className="p-1.5 rounded-lg hover:bg-neutral-100 text-neutral-400 hover:text-neutral-700"
+                          >
+                            <MoreVertical className="w-4 h-4" />
+                          </button>
+                          {activeActionMenu === u.id && (
+                            <div className="absolute right-0 mt-1 w-40 rounded-xl bg-white border border-neutral-200 shadow-lg py-1 z-20 text-xs text-left">
+                              <button
+                                onClick={() => handleResetPassword(u)}
+                                className="w-full px-3 py-2 text-neutral-700 hover:bg-neutral-50 text-left font-medium flex items-center justify-between"
+                              >
+                                <span>Reset Password</span>
+                              </button>
+                              <button
+                                onClick={() => handleToggleSuspendUser(u)}
+                                className={`w-full px-3 py-2 text-left font-medium ${
+                                  u.status === 'SUSPENDED' ? 'text-emerald-600 hover:bg-emerald-50' : 'text-amber-600 hover:bg-amber-50'
+                                }`}
+                              >
+                                {u.status === 'SUSPENDED' ? 'Activate Account' : 'Suspend Account'}
+                              </button>
+                              <button
+                                onClick={() => handleDeleteUser(u)}
+                                className="w-full px-3 py-2 text-rose-600 hover:bg-rose-50 text-left font-medium border-t border-neutral-100"
+                              >
+                                Delete User
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
 
-            {importError && (
-              <div style={{ padding: 12, background: '#FEE2E2', color: '#DC2626', borderRadius: 8, fontSize: 13, fontWeight: 600 }}>
-                {importError}
-              </div>
-            )}
-            
-            {importResult && (
-              <div style={{ padding: 16, background: '#ECFDF5', color: '#065F46', borderRadius: 8, fontSize: 13 }}>
-                <div style={{ fontWeight: 700, marginBottom: 8 }}>Import Successful</div>
-                <div>Created: {importResult.created || 0}</div>
-                <div>Skipped: {importResult.skipped || 0}</div>
-                <div>Duplicates: {importResult.duplicates || 0}</div>
-                <div>Invalid Emails: {importResult.invalidEmails || 0}</div>
-              </div>
-            )}
-
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 8 }}>
-              <button 
-                onClick={() => {
-                  setIsBulkImportOpen(false);
-                  setImportFile(null);
-                  setImportResult(null);
-                  setImportError(null);
-                }}
-                disabled={isImporting}
-                style={{ padding: '10px 16px', background: '#FFF', border: '1px solid #E5E7EB', borderRadius: 8, fontSize: 14, fontWeight: 600, color: '#374151', cursor: 'pointer', opacity: isImporting ? 0.5 : 1 }}>
-                Cancel
-              </button>
-              <button 
-                onClick={handleBulkImport}
-                disabled={!importFile || isImporting}
-                style={{ padding: '10px 16px', background: '#000', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, color: '#FFF', cursor: 'pointer', opacity: (!importFile || isImporting) ? 0.5 : 1 }}>
-                {isImporting ? 'Importing...' : 'Import Users'}
-              </button>
-            </div>
+        {/* Pagination Footer */}
+        <div className="p-4 border-t border-neutral-100 flex flex-col sm:flex-row items-center justify-between gap-4 bg-neutral-50/50">
+          <span className="text-xs font-medium text-neutral-500">
+            {filteredUsers.length > 0
+              ? `Showing ${(currentPage - 1) * itemsPerPage + 1} to ${Math.min(
+                  currentPage * itemsPerPage,
+                  filteredUsers.length
+                )} of ${filteredUsers.length} identities`
+              : 'Showing 0 users'}
+          </span>
+          <div className="max-w-xs">
+            <Pagination totalPages={totalPages || 1} value={currentPage} onChange={setCurrentPage} />
           </div>
         </div>
-      )}
+      </div>
 
       {/* New User Modal */}
       {isNewUserOpen && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#FFF', borderRadius: 16, width: '100%', maxWidth: 480, padding: 32, display: 'flex', flexDirection: 'column', gap: 24, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
-            <div>
-              <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0, marginBottom: 8, color: '#111827' }}>Add New User</h2>
-              <p style={{ fontSize: 14, color: '#6B7280', margin: 0 }}>Create a new global identity across the network.</p>
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-neutral-200 p-6 max-w-md w-full shadow-xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-neutral-100">
+              <h3 className="text-base font-bold text-neutral-900">Provision User Identity</h3>
+              <button onClick={() => setIsNewUserOpen(false)} className="text-neutral-400 hover:text-neutral-700">
+                <X className="w-4 h-4" />
+              </button>
             </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {createUserError && (
-                <div style={{ padding: 12, background: '#FEE2E2', color: '#DC2626', borderRadius: 8, fontSize: 13, fontWeight: 600 }}>
-                  {createUserError}
-                </div>
-              )}
-              <div style={{ display: 'flex', gap: 16 }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>First Name</label>
-                  <input 
-                    type="text" 
-                    placeholder="John" 
+
+            {createUserError && (
+              <div className="p-3 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-xs">
+                {createUserError}
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider block mb-1">
+                    First Name
+                  </label>
+                  <input
                     value={newUserForm.firstName}
-                    onChange={(e) => setNewUserForm(prev => ({ ...prev, firstName: e.target.value }))}
-                    style={{ width: '100%', padding: '10px 12px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 14, outline: 'none' }} 
+                    onChange={(e) => setNewUserForm((prev) => ({ ...prev, firstName: e.target.value }))}
+                    placeholder="John"
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl text-xs"
                   />
                 </div>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Last Name</label>
-                  <input 
-                    type="text" 
-                    placeholder="Doe" 
+                <div>
+                  <label className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider block mb-1">
+                    Last Name
+                  </label>
+                  <input
                     value={newUserForm.lastName}
-                    onChange={(e) => setNewUserForm(prev => ({ ...prev, lastName: e.target.value }))}
-                    style={{ width: '100%', padding: '10px 12px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 14, outline: 'none' }} 
+                    onChange={(e) => setNewUserForm((prev) => ({ ...prev, lastName: e.target.value }))}
+                    placeholder="Doe"
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl text-xs"
                   />
                 </div>
               </div>
-              
+
               <div>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Email Address</label>
-                <input 
-                  type="email" 
-                  placeholder="john@example.com" 
+                <label className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider block mb-1">
+                  Email Address
+                </label>
+                <input
+                  type="email"
                   value={newUserForm.email}
                   onChange={(e) => {
                     setIsEmailManuallyEdited(true);
-                    setNewUserForm(prev => ({ ...prev, email: e.target.value }));
+                    setNewUserForm((prev) => ({ ...prev, email: e.target.value }));
                   }}
-                  style={{ width: '100%', padding: '10px 12px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 14, outline: 'none' }} 
+                  placeholder="user@vidya.ai"
+                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl text-xs"
                 />
               </div>
-              
+
               <div>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Role</label>
-                <NativeSelect 
+                <label className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider block mb-1">
+                  System Role
+                </label>
+                <NativeSelect
                   value={newUserForm.role}
-                  onChange={(e) => setNewUserForm(prev => ({ ...prev, role: e.target.value }))}
-                  style={{ width: '100%', padding: '10px 12px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 14, outline: 'none', backgroundColor: '#FFF' }}
+                  onChange={(e) => setNewUserForm((prev) => ({ ...prev, role: e.target.value }))}
+                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl text-xs font-bold"
                 >
                   <option value="STUDENT">Student</option>
                   <option value="TEACHER">Faculty</option>
@@ -671,37 +626,108 @@ export default function GlobalUsersDirectory() {
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Organization</label>
-                <NativeSelect 
+                <label className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider block mb-1">
+                  Assigned Institution
+                </label>
+                <NativeSelect
                   value={newUserForm.organizationId}
-                  onChange={(e) => setNewUserForm(prev => ({ ...prev, organizationId: e.target.value }))}
-                  style={{ width: '100%', padding: '10px 12px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 14, outline: 'none', backgroundColor: '#FFF' }}
+                  onChange={(e) => setNewUserForm((prev) => ({ ...prev, organizationId: e.target.value }))}
+                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl text-xs font-bold"
                 >
-                  <option value="">Select Organization (Optional for Super Admin)</option>
-                  {stats?.orgBreakdown.filter(o => o.id).map((o: any) => (
-                    <option key={o.id} value={o.id}>{o.name}</option>
-                  ))}
+                  <option value="">Select Organization (Optional)</option>
+                  {stats?.orgBreakdown
+                    .filter((o) => o.id)
+                    .map((o) => (
+                      <option key={o.id} value={o.id!}>
+                        {o.name}
+                      </option>
+                    ))}
                 </NativeSelect>
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 8 }}>
-              <button 
-                onClick={() => {
-                  setIsNewUserOpen(false);
-                  setCreateUserError(null);
-                }}
-                disabled={isCreatingUser}
-                style={{ padding: '10px 16px', background: '#FFF', border: '1px solid #E5E7EB', borderRadius: 8, fontSize: 14, fontWeight: 600, color: '#374151', cursor: 'pointer', opacity: isCreatingUser ? 0.5 : 1 }}
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-neutral-100">
+              <button
+                type="button"
+                onClick={() => setIsNewUserOpen(false)}
+                className="px-4 py-2 rounded-xl border border-neutral-200 text-xs font-bold text-neutral-600 hover:bg-neutral-50"
               >
                 Cancel
               </button>
-              <button 
+              <button
                 onClick={handleCreateUser}
                 disabled={isCreatingUser}
-                style={{ padding: '10px 16px', background: '#000', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, color: '#FFF', cursor: 'pointer', opacity: isCreatingUser ? 0.5 : 1 }}
+                className="px-4 py-2 rounded-xl bg-[#e05934] hover:bg-[#c94a2a] text-white text-xs font-bold disabled:opacity-50"
               >
-                {isCreatingUser ? 'Creating...' : 'Create User'}
+                {isCreatingUser ? 'Creating...' : 'Create Account'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Import Modal */}
+      {isBulkImportOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-neutral-200 p-6 max-w-md w-full shadow-xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-neutral-100">
+              <h3 className="text-base font-bold text-neutral-900">Bulk Import via CSV</h3>
+              <button onClick={() => setIsBulkImportOpen(false)} className="text-neutral-400 hover:text-neutral-700">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="relative border-2 border-dashed border-neutral-200 hover:border-neutral-300 rounded-2xl p-8 text-center bg-neutral-50 flex flex-col items-center justify-center cursor-pointer">
+              <input
+                type="file"
+                accept=".csv,.xlsx"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files.length > 0) {
+                    setImportFile(e.target.files[0]);
+                    setImportError(null);
+                    setImportResult(null);
+                  }
+                }}
+                className="absolute inset-0 opacity-0 cursor-pointer"
+              />
+              <Upload className="w-8 h-8 text-neutral-400 mb-2" />
+              <p className="text-xs font-bold text-neutral-800">
+                {importFile ? importFile.name : 'Click to select or drag CSV file here'}
+              </p>
+              <p className="text-[11px] text-neutral-400 mt-1">Columns: firstName, lastName, email, role, code</p>
+            </div>
+
+            {importError && (
+              <div className="p-3 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-xs font-medium">
+                {importError}
+              </div>
+            )}
+
+            {importResult && (
+              <div className="p-3 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl text-xs space-y-1">
+                <div className="font-bold flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>Import Completed</span>
+                </div>
+                <p>Created: {importResult.created || 0} users</p>
+                <p>Skipped / Duplicates: {importResult.skipped || importResult.duplicates || 0}</p>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-neutral-100">
+              <button
+                type="button"
+                onClick={() => setIsBulkImportOpen(false)}
+                className="px-4 py-2 rounded-xl border border-neutral-200 text-xs font-bold text-neutral-600 hover:bg-neutral-50"
+              >
+                Close
+              </button>
+              <button
+                onClick={handleBulkImport}
+                disabled={!importFile || isImporting}
+                className="px-4 py-2 rounded-xl bg-[#e05934] hover:bg-[#c94a2a] text-white text-xs font-bold disabled:opacity-50"
+              >
+                {isImporting ? 'Importing...' : 'Upload & Process'}
               </button>
             </div>
           </div>

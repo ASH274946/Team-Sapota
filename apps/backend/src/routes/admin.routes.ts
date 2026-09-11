@@ -133,8 +133,10 @@ router.post('/approvals/:id/reject', asyncHandler(AdminController.rejectAssessme
 router.post('/approvals/:id/request-changes', asyncHandler(AdminController.requestChanges));
 router.post('/approvals/:id/publish', asyncHandler(AdminController.publishAssessment));
 
-// ── 18. Knowledge Base Stats ──
+// ── 18. Knowledge Base Stats & Resources ──
 router.get('/knowledge/stats', asyncHandler(AdminController.getKnowledgeStats));
+router.post('/knowledge/resources', uploadMiddleware.single('file'), asyncHandler(AdminController.createKnowledgeResource));
+router.delete('/knowledge/resources/:id', asyncHandler(AdminController.deleteKnowledgeResource));
 
 // ── 19. Organization Analytics Dashboard ──
 router.get('/analytics/dashboard', asyncHandler(AdminController.getOrgAnalyticsDashboard));

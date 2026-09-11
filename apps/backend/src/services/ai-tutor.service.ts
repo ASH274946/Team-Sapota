@@ -105,21 +105,20 @@ Mode: ${activeMode}
 Student Weaknesses: ${weaknesses}
 Topic: ${session.subject}
 
-CRITICAL RULES:
-1. Direct Answers Allowed: ${allowDirectAnswers}. If false, you MUST use Socratic questioning to guide the student.
-2. ${modeInstructions}
-3. Use the provided RAG context to ground your explanation.
-4. Keep the explanation within a maximum conceptual depth of ${maxDepth}.
-5. MULTI-QUESTION HANDLING:
-   - If the student's message contains multiple questions (e.g., numbered, bulleted, paragraph-separated, or mixed format), you MUST answer EVERY question.
-   - Do NOT stop after the first question.
-   - If there are multiple questions, begin your response exactly with: "I found X questions in your message. I'll answer each one separately."
-   - Format your response clearly separating each answer like this:
-     Question 1
-     [Answer]
-     ----------------
-     Question 2
-     [Answer]
+PEDAGOGICAL GUIDELINES:
+1. Mode Rules:
+   - Direct Answers Allowed: ${allowDirectAnswers} (If false and mode is SOCRATIC or HINT, guide through questions and clues instead of giving final solutions immediately).
+   - ${modeInstructions}
+2. Tone & Quality:
+   - Be an engaging, patient, and highly expert AI academic tutor.
+   - Use clear GitHub Flavored Markdown (headings, bold text, bullet points, tables, and formatted code blocks with language tags where applicable).
+   - If the student asks for technical examples (e.g., TypeScript, Python, math formulas), provide accurate, well-commented code snippets.
+3. Multi-Concept / Multi-Question Queries:
+   - If the student asks about multiple aspects or concepts, address each one logically with clear markdown headings or numbered sections.
+   - Do NOT output robotic intros like "I found X questions in your message". Speak naturally and authoritatively.
+4. Grounding:
+   - Ground your explanation in the provided syllabus and RAG context when available.
+   - Keep explanation depth within ${maxDepth} levels of conceptual breakdown.
 
 Student Message: "${userMessage}"
 `;
@@ -128,7 +127,7 @@ Student Message: "${userMessage}"
 ${readMasterPrompt()}
 
 ${dynamicContext}
-6. Output your response ONLY as a JSON object matching this schema:
+5. Output your response ONLY as a JSON object matching this schema:
 {
   "message": "string (The formatted markdown response)",
   "suggestedFollowUp": "string",
@@ -141,7 +140,7 @@ ${dynamicContext}
 ${readMasterPrompt()}
 
 ${dynamicContext}
-6. Output ONLY the markdown tutor response. Do NOT wrap the answer in JSON or code fences.
+5. Output ONLY the markdown tutor response. Do NOT wrap the answer in JSON or code fences.
 `;
 
     return {
@@ -261,17 +260,46 @@ ${dynamicContext}
     }
 
     let fullText = '';
-    for await (const token of AIOrchestrator.stream({
-      intent: 'GenerateQuestionExplanation',
-      context: ctx.ragContext,
-      taskInstructions: ctx.streamPrompt,
-      signal,
-    })) {
-      fullText += token;
-      yield { type: 'token', token };
+    try {
+      for await (const token of AIOrchestrator.stream({
+        intent: 'GenerateQuestionExplanation',
+        context: ctx.ragContext,
+        taskInstructions: ctx.streamPrompt,
+        signal,
+      })) {
+        fullText += token;
+        yield { type: 'token', token };
+      }
+    } catch (streamErr) {
+      if (!fullText) {
+        try {
+          const genResult = await AIOrchestrator.generate({
+            intent: 'GenerateQuestionExplanation',
+            context: ctx.ragContext,
+            taskInstructions: ctx.jsonPrompt,
+            responseFormat: { type: 'json_object' },
+            signal,
+          });
+          const text = genResult?.message || (typeof genResult === 'string' ? genResult : '');
+          if (text) {
+            fullText = text;
+            yield { type: 'token', token: text };
+          }
+        } catch {
+          // If all AI fails, provide a sensible academic prompt
+          const fallback = `I am ready to help you learn **${ctx.activeMode}** style. Please tell me which specific aspect of this topic you would like to explore or solve!`;
+          fullText = fallback;
+          yield { type: 'token', token: fallback };
+        }
+      }
     }
 
-    const message = fullText.trim();
+    let message = fullText.trim();
+    if (!message) {
+      message = `I'm here to help you master this concept. Could you share what questions you have about this topic?`;
+      yield { type: 'token', token: message };
+    }
+
     const ragReferences: Prisma.InputJsonValue = ctx.sources.length
       ? { source: 'rag_engine', contextRetrieved: true, citations: ctx.sources as unknown as Prisma.InputJsonValue }
       : { source: 'rag_engine', contextRetrieved: Boolean(ctx.ragContext) };

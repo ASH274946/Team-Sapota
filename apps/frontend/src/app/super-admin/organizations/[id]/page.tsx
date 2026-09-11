@@ -105,7 +105,9 @@ export default function OrganizationDetail() {
     const isSuspended = org.status === 'SUSPENDED';
     if (!confirm(`${isSuspended ? 'Activate' : 'Suspend'} ${org.name}?`)) return;
     try {
-      const res = await api.post(`/super-admin/organizations/${id}/suspend`);
+      const res = await api.post(`/super-admin/organizations/${id}/suspend`, {
+        action: isSuspended ? 'activate' : 'suspend',
+      });
       if (res.data?.success) { toast.success(`Organization ${isSuspended ? 'activated' : 'suspended'}.`); loadOrg(); }
     } catch (err) { toast.error(err instanceof Error ? err.message : 'Failed'); }
   };

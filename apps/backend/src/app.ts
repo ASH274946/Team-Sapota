@@ -1,6 +1,7 @@
 // Restart trigger comment
 import 'express-async-errors';
 import express from 'express';
+import path from 'path';
 import cookieParser from 'cookie-parser';
 import http from 'http';
 import cors from 'cors';
@@ -307,6 +308,11 @@ function createApp() {
   });
   app.use('/api', globalIpRateLimiter);
   app.use('/api', limiter);
+
+  const uploadsDir = path.resolve(process.cwd(), 'uploads');
+  app.use('/uploads', express.static(uploadsDir));
+  app.use('/api/uploads', express.static(uploadsDir));
+  app.use('/api/v1/uploads', express.static(uploadsDir));
 
   app.use('/api', apiRouter);
 

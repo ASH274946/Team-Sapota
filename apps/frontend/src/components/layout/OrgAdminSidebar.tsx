@@ -16,6 +16,11 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   ShieldCheck,
+  Settings,
+  Target,
+  Building2,
+  CreditCard,
+  History,
 } from 'lucide-react';
 import { useSidebarStore } from '@/store/sidebar.store';
 import { useAuthStore } from '@/store/auth.store';
@@ -93,11 +98,21 @@ export function OrgAdminSidebar() {
       ],
     },
     {
-      title: 'MANAGEMENT',
+      title: 'ACADEMIC & CURRICULUM',
       items: [
-        { href: ROUTES.ORG_ADMIN.USERS, label: 'Faculty and Students', icon: Users },
-        { href: ROUTES.ORG_ADMIN.CLASSES, label: 'Classes', icon: BookOpen },
+        { href: ROUTES.ORG_ADMIN.USERS, label: 'Faculty & Students', icon: Users },
+        { href: ROUTES.ORG_ADMIN.CLASSES, label: 'Classes & Sections', icon: BookOpen },
+        { href: '/admin/obe', label: 'OBE & Curriculum', icon: Target },
+        { href: '/admin/departments', label: 'Departments', icon: Building2 },
+      ],
+    },
+    {
+      title: 'GOVERNANCE & SETTINGS',
+      items: [
         { href: ROUTES.ORG_ADMIN.SESSIONS, label: 'Sessions & Logins', icon: ShieldCheck },
+        { href: '/admin/billing', label: 'Billing & Plan', icon: CreditCard },
+        { href: '/admin/audit', label: 'Audit Logs', icon: History },
+        { href: ROUTES.ORG_ADMIN.SETTINGS, label: 'Settings', icon: Settings },
       ],
     },
   ];
