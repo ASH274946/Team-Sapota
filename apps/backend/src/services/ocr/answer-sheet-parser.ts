@@ -89,7 +89,7 @@ export function parseAnswerSheetText(rawText: string): StructuredAnswerSheetResu
       if (match) {
         if (pIdx === 3 || (line.startsWith('(') && match[1])) {
           // Sub-part e.g. "(b): ..." inherits current question base number
-          const baseQMatch = currentQ ? currentQ.questionNumber.match(/^(Q[0-9]+)/i) : null;
+          const baseQMatch: RegExpMatchArray | null = currentQ ? currentQ.questionNumber.match(/^(Q[0-9]+)/i) : null;
           matchedQNumber = baseQMatch ? baseQMatch[1] : (currentQ ? currentQ.questionNumber : 'Q1');
           matchedPart = match[1];
           remainingLineText = match[2] || '';
@@ -110,7 +110,7 @@ export function parseAnswerSheetText(rawText: string): StructuredAnswerSheetResu
       }
 
       // Initialize new question block
-      const fullQKey = matchedPart ? `${matchedQNumber}(${matchedPart})` : matchedQNumber;
+      const fullQKey: string = matchedPart ? `${matchedQNumber}(${matchedPart})` : matchedQNumber;
       const unreadableInLine = (line.match(/\[unreadable(?:\s+handwriting)?\]/gi) || []).length;
 
       currentQ = {

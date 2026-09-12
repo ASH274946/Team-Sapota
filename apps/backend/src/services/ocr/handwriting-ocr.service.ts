@@ -54,7 +54,9 @@ export class HandwritingOcrService {
       'If there are handwritten sketches, graphs, or labeled diagrams, transcribe a concise semantic tag on its own line: [Diagram: Description with visible labels].',
     ];
 
-    const enhancement = preprocessed.enhancementPrompt ? `\n${preprocessed.enhancementPrompt}` : '';
+    const enhancement = preprocessed.enhancementPromptHints && preprocessed.enhancementPromptHints.length > 0
+      ? `\n${preprocessed.enhancementPromptHints.join('\n')}`
+      : '';
 
     if (purpose === 'answer_sheet') {
       return [
