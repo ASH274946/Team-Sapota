@@ -1,0 +1,46 @@
+
+// ── Research & Digital Library (Phase 21) ──
+model DigitalLibraryItem {
+  id             String       @id @default(uuid())
+  title          String
+  type           String       // Book, Journal, Paper
+  authors        String
+  metadata       Json?        // ISBN, DOI, publisher
+  fileUrl        String?
+  organizationId String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId])
+}
+
+model ResearchPaper {
+  id             String       @id @default(uuid())
+  title          String
+  abstract       String
+  status         String       // Draft, Review, Published
+  authorId       String
+  organizationId String
+  citationFormat String       @default("APA")
+  fileUrl        String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([authorId])
+  @@index([organizationId])
+}
+
+model ThesisProposal {
+  id             String       @id @default(uuid())
+  title          String
+  abstract       String
+  studentId      String
+  supervisorId   String
+  status         String       // Proposed, Approved, Defended
+  organizationId String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([studentId])
+  @@index([supervisorId])
+}

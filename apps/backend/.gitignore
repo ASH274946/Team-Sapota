@@ -1,0 +1,32 @@
+logs/
+dist/
+node_modules/
+uploads/pdfs/
+*.env
+.env
+
+# Log and error files
+*.log
+*.err
+backend.log
+backend.err
+
+# Debug and one-off scripts (never ship these)
+debug*.js
+debug*.ts
+check-*.js
+check-*.ts
+query_triggers*.js
+query_triggers*.ts
+update_trigger*.js
+user-check*.js
+test-approve*.ts
+test-approve*.js
+prisma-error.json
+
+# ESLint report (generated artifact)
+eslint-report.json
+
+# Ignore custom seed scripts containing test credentials
+seed-custom-users.ts
+
