@@ -6,6 +6,7 @@ import OpenAI from 'openai';
 import { env } from '../config/env';
 import { logger } from '../utils/logger';
 import { getR2Storage } from './storage/r2-storage';
+import { HandwritingOcrService, DocumentPurpose } from './ocr/handwriting-ocr.service';
 
 export interface FileExtractionResult {
   filename: string;
@@ -171,9 +172,9 @@ export function isImageDescriptionNoise(line: string): boolean {
     return true;
   }
 
-  // 2. Spatial UI / layout descriptions (e.g. "The title at the top reads...", "At the bottom of the screen...", "The background of the image is...")
+  // 2. Spatial UI / layout descriptions (e.g. "The title at the top reads...", "At the top left of the screen...", "The background of the image is...")
   if (
-    /^(?:the\s+title\s+(?:at\s+the\s+top\s+)?reads|below\s+the\s+title|at\s+the\s+(?:top|bottom|left|right|center)\s+of\s+the\s+(?:screen|image|page|document|picture)|on\s+the\s+(?:top|bottom|left|right)\s+(?:side|corner|portion)?|the\s+background\s+(?:of\s+the\s+image\s+)?is|the\s+header\s+(?:at\s+the\s+top\s+)?(?:shows|reads|displays)|the\s+footer\s+(?:shows|reads|displays))/i.test(
+    /^(?:the\s+title\s+(?:at\s+the\s+top\s+)?reads|below\s+the\s+title|at\s+the\s+(?:top|bottom|left|right|center)(?:\s+(?:left|right|top|bottom))?\s+(?:of\s+the\s+)?(?:screen|image|page|document|picture|photo)|on\s+the\s+(?:top|bottom|left|right)(?:\s+(?:left|right|top|bottom))?\s+(?:side|corner|portion)?|the\s+background\s+(?:of\s+the\s+(?:image|photo|picture)\s+)?is|the\s+header\s+(?:at\s+the\s+top\s+)?(?:shows|reads|displays)|the\s+footer\s+(?:shows|reads|displays))/i.test(
       trimmed
     )
   ) {
@@ -184,7 +185,8 @@ export function isImageDescriptionNoise(line: string): boolean {
   if (
     /^(?:battery(?:\s*:\s*\d+%|\s+level|\s+percentage|\s+icon)?|wi-?fi(?:\s+icon|\s+signal)?|signal\s+strength|network\s+status|navigation\s+bar|notification\s+bar|status\s+bar|system\s+icons?)\b/i.test(
       trimmed
-    )
+    ) ||
+    /(?:battery(?:\s*:\s*\d+%|\s+level|\s+percentage)|(?:9\d|100)%\s*battery|\b5g\b|\b4g\b|\blte\b|\bwi-fi\b)/i.test(trimmed) && /(?:time\s+is|status\s+bar|signal|screen)/i.test(trimmed)
   ) {
     return true;
   }
@@ -421,22 +423,37 @@ export function isMeaningfulSyllabusText(text: string): boolean {
 }
 
 /**
- * Runs Vision OCR on an image buffer / base64 data URL using NVIDIA NIM Vision (or OpenAI fallback).
- * Accurately and verbatim transcribes visible syllabus text with zero visual appearance descriptions.
+ * Runs Vision OCR on an image buffer / base64 data URL using the unified HandwritingOcrService
+ * (Gemini 2.5 Flash as primary, with NVIDIA NIM and OpenAI as fallbacks).
+ * Accurately transcribes visible handwritten and printed text with zero visual appearance descriptions.
  */
 export async function performVisionOcr(
   imageBuffer: Buffer,
   mimeType: string = 'image/png',
-  filename?: string
+  filename?: string,
+  purpose: DocumentPurpose = 'syllabus'
 ): Promise<string> {
+  try {
+    const ocrResult = await HandwritingOcrService.extractFromImageBuffer(imageBuffer, {
+      filename,
+      mimeType,
+      purpose,
+    });
+
+    if (ocrResult && ocrResult.text.trim()) {
+      return ocrResult.text.trim();
+    }
+  } catch (err: any) {
+    logger.warn({ error: err.message, filename }, '[performVisionOcr] HandwritingOcrService failed, trying direct fallback');
+  }
+
+  // Fallback to legacy clients if needed
   const clients = getAiClients();
   if (clients.length === 0) {
-    throw new Error('No AI provider configured. Please set NVIDIA_API_KEY in your .env file.');
+    throw new Error('No AI vision provider configured. Please set GEMINI_API_KEY or NVIDIA_API_KEY in your .env file.');
   }
 
   const base64Image = imageBuffer.toString('base64');
-
-  // Normalize to standard MIME types accepted by OpenAPI vision specs
   let cleanMime = 'image/jpeg';
   const lowerMime = (mimeType || '').toLowerCase();
   const lowerFilename = (filename || '').toLowerCase();
@@ -452,47 +469,29 @@ export async function performVisionOcr(
   }
 
   const dataUrl = `data:${cleanMime};base64,${base64Image}`;
-
   const prompt =
-    'You are extracting text from a syllabus, curriculum, or lesson-plan document.\n\n' +
-    'Return ONLY the actual text belonging to the syllabus or lesson plan.\n\n' +
-    'Do NOT describe the image or screenshot.\n' +
-    'Do NOT describe the phone, device, screen, UI, icons, battery, Wi-Fi, signal strength, navigation bar, colors, background, layout, or visual appearance.\n' +
-    'Do NOT provide explanations, observations, summaries, or introductory statements.\n' +
-    'Do NOT write phrases such as \'The image shows...\' or \'The screenshot contains...\'.\n\n' +
-    'Preserve all actual syllabus content, including headings, units, topics, revision entries, tutorials, seminars, course outcomes, and other academic information visible in the source.\n\n' +
-    'Do not invent, infer, summarize, or add content.\n\n' +
-    'Output ONLY the extracted syllabus/lesson-plan text.';
+    'You are extracting text from a document or educational sheet.\n' +
+    'Transcribe all visible printed and handwritten text verbatim.\n' +
+    'Do NOT describe the image, photo, device, screen, UI, or visual appearance.\n' +
+    'Do not invent or summarize content. If handwriting is illegible, write [unreadable handwriting].\n' +
+    'Output ONLY the extracted document text.';
 
   let lastError: any = null;
 
-  for (const { client, provider, models } of clients) {
+  for (const { client, models } of clients) {
     for (const model of models) {
-      const startTime = Date.now();
       try {
-        logger.info({ provider, model, filename, mime: cleanMime }, '[performVisionOcr] Starting fast OCR inference...');
         const response = await client.chat.completions.create({
           model,
           temperature: 0.0,
-          max_tokens: 2048,
+          max_tokens: 3072,
           messages: [
-            {
-              role: 'system',
-              content: prompt,
-            },
+            { role: 'system', content: prompt },
             {
               role: 'user',
               content: [
-                {
-                  type: 'text',
-                  text: 'Extract the syllabus/lesson-plan text from this document image:',
-                },
-                {
-                  type: 'image_url',
-                  image_url: {
-                    url: dataUrl,
-                  },
-                },
+                { type: 'text', text: 'Extract all text from this document image:' },
+                { type: 'image_url', image_url: { url: dataUrl } },
               ],
             },
           ],
@@ -500,24 +499,17 @@ export async function performVisionOcr(
 
         const rawExtracted = response.choices[0]?.message?.content?.trim() || '';
         const extracted = cleanExtractedText(rawExtracted);
-        const durationMs = Date.now() - startTime;
 
-        if (isMeaningfulSyllabusText(extracted)) {
-          logger.info({ provider, model, filename, length: extracted.length, durationMs }, '[performVisionOcr] OCR transcription completed successfully');
+        if (extracted.length > 5) {
           return extracted;
-        } else {
-          logger.warn({ provider, model, filename, rawExtracted, durationMs }, '[performVisionOcr] Vision output contained only noise or insufficient syllabus content');
         }
       } catch (err: any) {
         lastError = err;
-        const durationMs = Date.now() - startTime;
-        logger.warn({ error: err.message, provider, model, filename, durationMs }, '[performVisionOcr] Vision model attempt failed, falling back...');
       }
     }
   }
 
-  logger.error({ error: lastError, filename }, '[performVisionOcr] All vision models failed or produced only noise');
-  throw new Error(`OCR processing failed: ${lastError?.message || 'Unable to extract meaningful syllabus content from image'}`);
+  throw new Error(`OCR processing failed: ${lastError?.message || 'Unable to extract meaningful content from image'}`);
 }
 
 /**
@@ -627,7 +619,8 @@ function extractEmbeddedImagesFromPdfBuffer(buffer: Buffer): Array<{ buffer: Buf
 export async function extractTextFromFileBuffer(
   buffer: Buffer,
   filename: string,
-  mimetype?: string
+  mimetype?: string,
+  purpose: DocumentPurpose = 'general'
 ): Promise<string> {
   if (!buffer || buffer.length === 0) {
     throw new Error(`File "${filename}" is empty.`);
@@ -723,7 +716,7 @@ export async function extractTextFromFileBuffer(
     mime.startsWith('image/')
   ) {
     const imageMime = mime.startsWith('image/') ? mime : ext === '.png' ? 'image/png' : 'image/jpeg';
-    const text = await performVisionOcr(buffer, imageMime, filename);
+    const text = await performVisionOcr(buffer, imageMime, filename, purpose);
     if (!text.trim()) {
       throw new Error(`OCR was unable to detect any visible text in image "${filename}".`);
     }
@@ -744,13 +737,16 @@ export async function extractTextFromFileBuffer(
 /**
  * Processes a single uploaded Multer file and cleans up disk temporary file.
  */
-export async function processUploadedFile(file: Express.Multer.File): Promise<FileExtractionResult> {
+export async function processUploadedFile(
+  file: Express.Multer.File,
+  purpose: DocumentPurpose = 'general'
+): Promise<FileExtractionResult> {
   const filename = file.originalname || path.basename(file.path);
   const fileType = file.mimetype || 'application/octet-stream';
 
   try {
     const buffer = fs.readFileSync(file.path);
-    const extractedText = await extractTextFromFileBuffer(buffer, filename, fileType);
+    const extractedText = await extractTextFromFileBuffer(buffer, filename, fileType, purpose);
 
     return {
       filename,
@@ -782,7 +778,8 @@ export async function processUploadedFile(file: Express.Multer.File): Promise<Fi
  * Batch processes an array of uploaded files independently, preserving order and formatting multi-file results.
  */
 export async function processUploadedFiles(
-  files: Express.Multer.File[]
+  files: Express.Multer.File[],
+  purpose: DocumentPurpose = 'general'
 ): Promise<BatchExtractionOutput> {
   if (!files || files.length === 0) {
     throw new Error('No files provided for extraction');
@@ -796,7 +793,7 @@ export async function processUploadedFiles(
     while (currentIndex < files.length) {
       const idx = currentIndex++;
       const file = files[idx];
-      results[idx] = await processUploadedFile(file);
+      results[idx] = await processUploadedFile(file, purpose);
     }
   };
 

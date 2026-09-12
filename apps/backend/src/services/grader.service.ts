@@ -9,12 +9,17 @@ import { invalidateCache } from '../api/common/cache';
 import { getPaper } from './paper.service';
 
 import { extractTextFromFileBuffer } from './document-extractor.service';
+import { DocumentPurpose } from './ocr/handwriting-ocr.service';
 
-export async function extractTextFromFile(filePath: string, fileType: string): Promise<string> {
+export async function extractTextFromFile(
+  filePath: string,
+  fileType: string,
+  purpose: DocumentPurpose = 'answer_sheet'
+): Promise<string> {
   try {
     const buffer = await fs.readFile(filePath);
     const filename = path.basename(filePath);
-    return await extractTextFromFileBuffer(buffer, filename, fileType);
+    return await extractTextFromFileBuffer(buffer, filename, fileType, purpose);
   } catch (error) {
     logger.error({ error, filePath, fileType }, 'Failed to extract text from file');
     return '';
