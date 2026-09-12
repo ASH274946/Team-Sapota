@@ -1,0 +1,2 @@
+# Market validation plan
+Run 20 structured interviews, then 3 design-partner pilots. Test the painful workflows: CO/PO evidence, assessment preparation, attainment calculation and accreditation reporting—not feature preferences. Success requires a named budget owner, access to one real programme/course, two faculty reviewers and an OBE/IQAC owner. Measure baseline vs. VidyaAI preparation time, evidence completeness, attainment traceability, reviewer acceptance and report turnaround. Convert only if the institution will pay at the proposed annual price.

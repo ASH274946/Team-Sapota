@@ -32,19 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
-
-# vercel
-.vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
-
-# ESLint report (generated artifact)
-eslint-report.json
-
-# Internal planning docs
-PLAN.md
+!.env.example
 
 # Playwright E2E artifacts (auth sessions contain cookies — do NOT commit)
 /e2e/.auth

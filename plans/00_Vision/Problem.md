@@ -1,0 +1,2 @@
+# Problem
+Academic teams repeatedly assemble lesson plans, CO/PO mappings, assessments, attainment evidence, internal marks and accreditation material from fragmented syllabi, spreadsheets, ERP exports and personal files. This creates rework, inconsistent outcomes, weak traceability and last-minute compliance stress. Paper creation is a visible symptom, not the whole pain. Generic AI drafts text but does not provide institutional knowledge, deterministic controls, approval workflows, historical evidence or accountability.

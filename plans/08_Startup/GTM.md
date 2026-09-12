@@ -1,0 +1,2 @@
+# Go-to-market
+Land with engineering-college departments through design-partner pilots, then expand to institution-wide contracts. Lead with a measurable institutional outcome: OBE evidence and assessment workflows completed faster with traceable alignment. Build credibility through HOD/IQAC champions, sample non-confidential workflows and implementation support; avoid broad mass-market spend before one university-format segment is proven.

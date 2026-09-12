@@ -27,6 +27,5 @@ prisma-error.json
 # ESLint report (generated artifact)
 eslint-report.json
 
-# Ignore custom seed scripts containing test credentials
-seed-custom-users.ts
+
 

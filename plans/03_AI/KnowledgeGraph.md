@@ -1,0 +1,2 @@
+# Knowledge graph
+Nodes: institution, regulation, programme, semester, course, unit, topic, subtopic, prerequisite, CO, PO, PSO, Bloom level, assessment, item, rubric, source, evidence, report and review. Edges express coverage, alignment, attainment, prerequisite, evidence, duplicate and approval relations. Start with editable mappings and derive suggestions; do not infer curriculum truth without reviewer confirmation.

@@ -1,0 +1,2 @@
+# Competitor analysis
+Compare four alternatives in every sale: manual spreadsheets/Word, LMS assessment modules, examination-management suites, and generic AI copilots. VidyaAI must win on outcome mapping, blueprint controls, duplicate detection, reviewer workflow, local curriculum ingestion and export compatibility. Do not claim superiority until benchmarked against named alternatives in pilot discovery.

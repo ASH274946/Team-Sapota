@@ -1,0 +1,2 @@
+# High-level architecture
+Web app → API gateway/auth → application domains (institution, curriculum graph, OBE/attainment, assessment, evidence/reporting, review/export) → relational database/object store/search index. AI orchestration calls approved model providers through a policy layer. Async workers handle ingestion, entity extraction, indexing, exports, calculation and evaluation. Observability, audit logging and secrets management are shared platform services.

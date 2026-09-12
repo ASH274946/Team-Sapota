@@ -1,0 +1,2 @@
+# Startup thesis
+If VidyaAI can turn approved institutional sources and rules into a permissioned Academic Knowledge Engine, it can automate evidence-heavy academic workflows while preserving human accountability. The first useful output is a reviewable assessment blueprint; the durable product is the institution-specific curriculum, policy, outcome, evidence, feedback and workflow graph—not a generic question generator or a proprietary LLM.

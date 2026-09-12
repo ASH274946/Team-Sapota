@@ -1,0 +1,2 @@
+# MVP
+The MVP is a **knowledge-first OBE workflow**, not merely a paper generator. For one engineering-college department it ingests approved sources; creates editable course/unit/topic/CO/PO/PSO mappings; records evidence and versions; plans an assessment blueprint; drafts one cited item at a time; validates it; and routes it for approval. Outputs include an assessment pack, answer key/rubric draft, attainment-ready mappings and audit history. Exclude autonomous publication, high-stakes automated grading, attendance and generic chatbot features.

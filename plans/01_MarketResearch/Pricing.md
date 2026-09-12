@@ -1,0 +1,2 @@
+# Pricing hypothesis
+Price annually per department or institution, with a paid implementation/onboarding component. Pilot price should be low enough to reduce adoption risk but high enough to test budget ownership. Meter only expensive generation at high volume; never make routine faculty review feel metered. Quote after learning annual assessments, programmes, reviewers, integrations and retention requirements.

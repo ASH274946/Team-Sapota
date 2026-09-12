@@ -1,0 +1,2 @@
+# Pilot plan
+Duration: 8 weeks; scope: one programme/department, 1–3 courses and one named assessment/OBE evidence cycle. Baseline document chase time, assessment/review time, mapping completeness and report turnaround. Train 5–10 faculty plus one IQAC/OBE lead, configure sources and templates, run parallel review and hold weekly feedback sessions. Exit criteria: material time reduction, complete traceable mappings, high reviewer acceptance, no critical confidentiality incident and a conversion decision.
